@@ -3,6 +3,7 @@ import { Channel, Msg } from './channel';
 import { h, icon, toast } from './dom';
 import { MARGIN } from './engine';
 import { generate, GenKind } from './generate';
+import { DungeonParams, generateDungeon } from './dungeon';
 import { History } from './history';
 import {
   CELL, Combat, MIN_SIZE, DoorKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
@@ -12,6 +13,7 @@ import { renderDrawer } from './ui/drawer';
 import { hideHome, showHome } from './ui/home';
 import { renderInitiative } from './ui/initiative';
 import { positionInspector, renderInspector } from './ui/inspector';
+import { hideGenerator } from './ui/generator';
 import { allLights, drawLabel, drawMeasure, drawPing, labelFont, markerGeom, renderScene, stampSize, stampLayer, tokenRadius, View, visibleRect } from './render';
 import { MapRuntime } from './runtime';
 import { getMap, getMeta, listMaps, putMap, setMeta, StoredMap } from './storage';
@@ -138,8 +140,9 @@ export class Editor {
     el.initPanel = h('aside', { class: 'init-panel', 'aria-label': t('Initiative'), hidden: true });
     el.save = h('div', { class: 'save-status' });
     el.home = h('div', { class: 'home', hidden: true });
+    el.gen = h('div', { class: 'gen', hidden: true });
     this.stage = h('main', { class: 'stage' }, this.canvas, el.rail, el.initPanel, el.inspector, el.drawer, el.dock, buildZoom(this), el.save);
-    this.root.append(buildTopbar(this), this.stage, el.home);
+    this.root.append(buildTopbar(this), this.stage, el.home, el.gen);
     this.hist.onChange = () => updateTopbar(this);
     this.setSaveStatus('saved');
 
@@ -191,13 +194,14 @@ export class Editor {
     if (this.mode === 'session') this.channel.send({ t: 'map', id });
   }
 
-  async createMap(o: { name: string; cols: number; rows: number; template: string }) {
+  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string } }) {
     if (this.rt) await this.saveNow();
     const bg = o.template === 'outdoor' ? 'grass' : o.template === 'interior' ? 'wood' : 'rock';
     const size = (v: number) => Math.max(MIN_SIZE, Math.min(80, Math.round(v) || MIN_SIZE));
     const doc = newDoc(o.name, size(o.cols), size(o.rows), bg);
     const rt = new MapRuntime(doc);
-    if (['dungeon', 'cave', 'forest', 'tavern'].includes(o.template)) generate(rt, o.template as GenKind);
+    if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);
+    else if (['dungeon', 'cave', 'forest', 'tavern'].includes(o.template)) generate(rt, o.template as GenKind);
     this.showBusy(t('Painting the map…'));
     await nextFrame();
     rt.engine.flush();
@@ -209,11 +213,18 @@ export class Editor {
   }
 
   async regenerate(kind: GenKind) {
+    await this.regenerateWith(() => generate(this.rt, kind));
+  }
+  /** Replace the current map content with a dungeon built from generator parameters. */
+  async applyDungeon(params: DungeonParams, seed: string) {
+    await this.regenerateWith(() => generateDungeon(this.rt, params, seed));
+  }
+  private async regenerateWith(gen: () => void) {
     if (this.rt.doc.combat.active) { toast(t('End combat before regenerating the map')); return; }
     const rt = this.rt;
     this.showBusy(t('Generating…'));
     await nextFrame();
-    generate(rt, kind);
+    gen();
     rt.engine.flush();
     this.hideBusy();
     this.hist.clear();
@@ -793,6 +804,7 @@ export class Editor {
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); this.redo(); return; }
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveNow().then(() => toast(t('Saved'))); return; }
     if (typing) { if (e.key === 'Escape') tok.blur(); return; }
+    if (!this.el.gen.hidden) { if (e.key === 'Escape') { hideGenerator(this); if (!this.rt) this.showHome(); } return; }
     if (!this.el.home.hidden) { if (e.key === 'Escape' && this.rt) this.hideHome(); return; }
     if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); this.duplicateSel(); return; }
     if (e.code === 'Space') { if (!this.space) { this.space = true; this.updateCursor(); } e.preventDefault(); return; }

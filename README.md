@@ -23,7 +23,9 @@ npm run build      # output in dist/
   - Terrain brushes (grass, dirt, flagstone, wood, water, lava…) with natural, irregular edges.
   - Rooms with automatic walls, brush-dug caves, free-standing walls, doors (including secret ones).
   - ~60 hand-drawn top-down props, imported PNG assets, light sources, labels and markers with private notes.
-- **Generators**: dungeon, cave, forest clearing, tavern.
+- **Generators**: a dungeon generator with live preview and variants — three styles (rooms and corridors,
+  mixed with caves, ruins), presets, room shapes, loops, dead ends, doors, secret doors, traps, themed
+  furnishing and shareable seeds — plus cave, forest clearing and tavern generators.
 - **Play mode**: synchronized player window (fog of war, doors, tokens, pings, ruler, initiative), with real-scale calibration
   (1 square = 1 inch) for miniatures on a table-mounted TV, plus screen rotation.
 - **Combat**: initiative order, HP, AC and 5e conditions. Players only see names and conditions; health stays DM-only.
@@ -40,7 +42,8 @@ npm run build      # output in dist/
 | `src/editor.ts` | DM editor: input, tools, history, saving, session sync |
 | `src/ui/` | DM interface: top bar, intent rail and dock, object library, inspector, initiative panel, home screen, menus |
 | `src/player.ts` | player view |
-| `src/generate.ts` | random map generators |
+| `src/dungeon.ts` | dungeon generator (styles, presets, seeds) |
+| `src/generate.ts` · `src/genkit.ts` | cave, forest and tavern generators and shared helpers |
 
 ## License
 

@@ -18,6 +18,8 @@ export async function create(page: Page, template = 'Empty', background = 'Dark 
   const previous = await page.evaluate(() => window.editor.rt?.doc.id);
   await page.locator('.tpl').filter({ has: page.getByText(template, { exact: true }) }).click();
   if (template === 'Empty') await button(page, background).click();
+  // The Dungeon template opens the dungeon generator first.
+  if (template === 'Dungeon') await page.locator('.gen').getByRole('button', { name: 'Create map' }).click();
   await expect(page.locator('.home')).toBeHidden();
   await page.waitForFunction(old => window.editor?.rt?.doc.id !== old && window.editor?.maps.some(m => m.id === window.editor.rt?.doc.id), previous ?? null);
   await expect(page.locator('.save-status')).toHaveText('Saved');

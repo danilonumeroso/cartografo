@@ -87,7 +87,7 @@ test('language follows the DM, persists and keeps generated names', async ({ pag
   await expect(tv).toHaveTitle(/Vista giocatori/i);
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'it');
-  await expect(page.locator('.map-name')).toHaveText('Dungeon');
+  await expect(page.locator('.map-name')).toHaveText('Crypt');
   expect((await doc(page)).rooms).toEqual(rooms);
   await tv.close({ runBeforeUnload: true });
   await page.locator('[data-v="edit"]').click();

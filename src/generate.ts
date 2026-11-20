@@ -4,215 +4,23 @@ import { STAMP_BY_ID, STAMP_PAD, VARIANTS } from './stamps';
 import { ctx2d, makeCanvas, mulberry32, pick, rint, Rng, rrange, uid } from './util';
 import { fbmTile, sampleWrap } from './noise';
 import { t } from './i18n';
+import { B, reset } from './genkit';
+import { generateDungeon, PRESETS, seedPrefix } from './dungeon';
 
 export type GenKind = 'dungeon' | 'cave' | 'forest' | 'tavern';
 export const GEN_NAMES: Record<GenKind, string> = { dungeon: 'Dungeon', cave: t('Cave'), forest: t('Forest clearing'), tavern: t('Tavern') };
 
-class B {
-  doc: MapDoc; r: Rng; rt: MapRuntime;
-  constructor(rt: MapRuntime, seed: number) { this.rt = rt; this.doc = rt.doc; this.r = mulberry32(seed); }
-  stamp(type: string, cx: number, cy: number, rot = 0, scale = 1): Stamp {
-    const def = STAMP_BY_ID.get(type);
-    if (def) {
-      const r = (Math.hypot(def.w, def.h) / 2) * scale + (STAMP_PAD + 6) / CELL;
-      const fit = (v: number, max: number) => (max > 2 * r ? Math.min(max - r, Math.max(r, v)) : max / 2);
-      cx = fit(cx, this.doc.cols); cy = fit(cy, this.doc.rows);
-    }
-    const s: Stamp = { id: uid(), type, x: cx * CELL, y: cy * CELL, rot, scale, variant: Math.floor(this.r() * VARIANTS), flip: this.r() < 0.5 && !!STAMP_BY_ID.get(type) };
-    this.doc.stamps.push(s);
-    return s;
-  }
-  room(x: number, y: number, w: number, h: number, floor: string, name?: string): Room {
-    const rm: Room = { id: uid(), pts: [x * CELL, y * CELL, (x + w) * CELL, y * CELL, (x + w) * CELL, (y + h) * CELL, x * CELL, (y + h) * CELL], floor, name };
-    this.doc.rooms.push(rm);
-    return rm;
-  }
-  door(x: number, y: number, vertical: boolean, kind: DoorKind = 'wood', width = 1): Door {
-    const d: Door = { id: uid(), x: x * CELL, y: y * CELL, rot: vertical ? Math.PI / 2 : 0, kind, open: false, width };
-    this.doc.doors.push(d);
-    return d;
-  }
-  label(text: string, cx: number, cy: number, size = 46, hidden = true): Label {
-    cx = Math.min(this.doc.cols - 0.5, Math.max(0.5, cx)); cy = Math.min(this.doc.rows - 0.5, Math.max(0.5, cy));
-    const l: Label = { id: uid(), x: cx * CELL, y: cy * CELL, text, font: 'Cinzel', size, color: '#f3e6c4', stroke: '#1a120c', rot: 0, bold: true, hidden };
-    this.doc.labels.push(l);
-    return l;
-  }
-  paint(key: string, cx: number, cy: number, rCells: number, hard = 0.3, strength = 1) {
-    this.rt.engine.dab(key, cx * CELL, cy * CELL, rCells * CELL, hard, strength, false);
-  }
-  stroke(key: string, pts: [number, number][], rCells: number, hard = 0.35) {
-    for (let i = 1; i < pts.length; i++) {
-      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (rCells * 0.3)));
-      for (let k = 0; k <= n; k++) this.paint(key, x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n, rCells, hard, 0.6);
-    }
-  }
-}
-
-function reset(doc: MapDoc) {
-  doc.rooms = []; doc.walls = []; doc.doors = []; doc.stamps = []; doc.lights = []; doc.labels = []; doc.markers = [];
-  doc.tokens = [];
-  doc.combat = { active: false, round: 1, turn: null, members: [] };
-}
-
 export function generate(rt: MapRuntime, kind: GenKind, seed = Date.now() % 100000) {
+  if (kind === 'dungeon') { generateDungeon(rt, PRESETS.crypt, `${seedPrefix('crypt')}-${seed}`); return; }
   reset(rt.doc);
   rt.engine.masks.clear();
   const b = new B(rt, seed);
-  if (kind === 'dungeon') dungeon(b);
-  else if (kind === 'cave') cave(b);
+  if (kind === 'cave') cave(b);
   else if (kind === 'forest') forest(b);
   else tavern(b);
   for (const k of rt.engine.masks.keys()) rt.engine.changed.add(k);
   rt.fog.fillAll();
   rt.engine.invalidateAll();
-}
-
-// ------------------------------------------------------------------ dungeon
-interface Box { x: number; y: number; w: number; h: number }
-function dungeon(b: B) {
-  const { doc, r } = b;
-  doc.bg = 'rock'; doc.wallStyle = 'stone'; doc.ambient = 0.55; doc.fogEnabled = true;
-  const C = doc.cols, R = doc.rows;
-  const target = Math.max(4, Math.min(14, Math.round((C * R) / 70)));
-  const boxes: Box[] = [];
-  for (let a = 0; a < 400 && boxes.length < target; a++) {
-    const w = rint(r, 3, 8), h = rint(r, 3, 7);
-    const x = rint(r, 1, C - w - 1), y = rint(r, 1, R - h - 1);
-    if (x < 1 || y < 1) continue;
-    if (boxes.some((o) => x < o.x + o.w + 2 && o.x < x + w + 2 && y < o.y + o.h + 2 && o.y < y + h + 2)) continue;
-    boxes.push({ x, y, w, h });
-  }
-  const inBox = (cx: number, cy: number) => boxes.findIndex((o) => cx >= o.x && cx < o.x + o.w && cy >= o.y && cy < o.y + o.h);
-  // spanning tree (Prim) + a couple of extra links
-  const center = (o: Box) => [Math.floor(o.x + o.w / 2), Math.floor(o.y + o.h / 2)];
-  const links: [number, number][] = [];
-  const done = new Set([0]);
-  while (done.size < boxes.length) {
-    let best: [number, number, number] | null = null;
-    for (const i of done) for (let j = 0; j < boxes.length; j++) {
-      if (done.has(j)) continue;
-      const [ax, ay] = center(boxes[i]), [bx, by] = center(boxes[j]);
-      const d = Math.abs(ax - bx) + Math.abs(ay - by);
-      if (!best || d < best[2]) best = [i, j, d];
-    }
-    if (!best) break;
-    links.push([best[0], best[1]]); done.add(best[1]);
-  }
-  for (let k = 0; k < Math.floor(boxes.length / 4); k++) {
-    const i = rint(r, 0, boxes.length - 1), j = rint(r, 0, boxes.length - 1);
-    if (i !== j) links.push([i, j]);
-  }
-  const roomObjs = boxes.map((o, i) => b.room(o.x, o.y, o.w, o.h, r() < 0.2 ? 'tiles' : 'flagstone', t('Room {n}', { n: i + 1 })));
-  const doorAt = new Set<string>();
-  for (const [i, j] of links) {
-    const [ax, ay] = center(boxes[i]), [bx, by] = center(boxes[j]);
-    const cells: [number, number][] = [];
-    const horizFirst = r() < 0.5;
-    let x = ax, y = ay;
-    cells.push([x, y]);
-    const stepTo = (tx: number, ty: number) => {
-      while (x !== tx) { x += Math.sign(tx - x); cells.push([x, y]); }
-      while (y !== ty) { y += Math.sign(ty - y); cells.push([x, y]); }
-    };
-    if (horizFirst) { stepTo(bx, ay); stepTo(bx, by); } else { stepTo(ax, by); stepTo(bx, by); }
-    // corridor rooms for cells outside boxes (merged into runs)
-    let run: [number, number][] = [];
-    const flush = () => {
-      if (!run.length) return;
-      const xs = run.map((c) => c[0]), ys = run.map((c) => c[1]);
-      const x0 = Math.min(...xs), y0 = Math.min(...ys);
-      b.room(x0, y0, Math.max(...xs) - x0 + 1, Math.max(...ys) - y0 + 1, 'flagstone').name = t('Corridor');
-      run = [];
-    };
-    for (let k = 0; k < cells.length; k++) {
-      const [cx, cy] = cells[k];
-      const inside = inBox(cx, cy) >= 0;
-      if (!inside) {
-        if (run.length && run[run.length - 1][0] !== cx && run[run.length - 1][1] !== cy) flush();
-        if (run.length >= 2) {
-          const [px, py] = run[run.length - 1], [qx, qy] = run[run.length - 2];
-          if ((px - qx) !== (cx - px) || (py - qy) !== (cy - py)) { const last = run[run.length - 1]; flush(); run.push(last); }
-        }
-        run.push([cx, cy]);
-      } else flush();
-      if (k > 0) {
-        const [px, py] = cells[k - 1];
-        const a = inBox(px, py) >= 0;
-        if (a !== inside) {
-          const vertical = px !== cx;
-          const ex = vertical ? Math.max(px, cx) : cx + 0.5;
-          const ey = vertical ? cy + 0.5 : Math.max(py, cy);
-          const key = `${ex},${ey}`;
-          if (!doorAt.has(key)) {
-            doorAt.add(key);
-            if (r() < 0.75) b.door(ex, ey, vertical, r() < 0.15 ? 'iron' : r() < 0.08 ? 'secret' : 'wood');
-          }
-        }
-      }
-    }
-    flush();
-  }
-  // furnish
-  const themes = ['crypt', 'storage', 'throne', 'ritual', 'library', 'prison', 'barracks', 'empty', 'empty'];
-  boxes.forEach((o, i) => {
-    b.label(String(i + 1), o.x + 0.55, o.y + 0.5, 44);
-    const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
-    // torches on top wall
-    if (r() < 0.85) b.stamp('torch', o.x + o.w / 2, o.y + 0.22);
-    if (o.w >= 6 && r() < 0.6) b.stamp('torch', o.x + 0.22, o.y + o.h / 2);
-    if (i === 0) { b.stamp('stairs', o.x + 0.5, o.y + o.h - 1); b.label(t('Entrance'), cx, o.y + o.h - 0.4, 30); return; }
-    const theme = pick(r, themes);
-    const free = () => [rrange(r, o.x + 0.8, o.x + o.w - 0.8), rrange(r, o.y + 0.8, o.y + o.h - 0.8)];
-    switch (theme) {
-      case 'crypt':
-        for (let x = o.x + 1; x < o.x + o.w - 0.5; x += 2) b.stamp('sarcophagus', x, cy, 0);
-        b.stamp('candles', o.x + 0.5, o.y + 0.5);
-        break;
-      case 'storage':
-        for (let k = 0; k < o.w + o.h; k++) {
-          const t = pick(r, ['barrel', 'crate', 'crate', 'sacks', 'barrels']);
-          const side = rint(r, 0, 3);
-          const p = side === 0 ? [rrange(r, o.x + 0.5, o.x + o.w - 0.5), o.y + 0.5] : side === 1 ? [rrange(r, o.x + 0.5, o.x + o.w - 0.5), o.y + o.h - 0.5] : side === 2 ? [o.x + 0.5, rrange(r, o.y + 0.5, o.y + o.h - 0.5)] : [o.x + o.w - 0.5, rrange(r, o.y + 0.5, o.y + o.h - 0.5)];
-          b.stamp(t, p[0], p[1], r() * 6.28);
-        }
-        break;
-      case 'throne':
-        b.stamp('rug', cx, cy + 0.5, Math.PI / 2, Math.min(1, (o.h - 1) / 3));
-        b.stamp('throne', cx, o.y + 0.75);
-        for (let y = o.y + 1.5; y < o.y + o.h - 0.5; y += 2) { b.stamp('pillar', o.x + 0.6, y); b.stamp('pillar', o.x + o.w - 0.6, y); }
-        b.stamp('brazier', cx - 1.2, o.y + 0.7); b.stamp('brazier', cx + 1.2, o.y + 0.7);
-        break;
-      case 'ritual':
-        b.stamp('pentagram', cx, cy, 0, Math.min(1.2, (Math.min(o.w, o.h) - 1) / 2));
-        b.stamp('altar', cx, o.y + 0.6);
-        b.stamp('candles', cx - 1.4, cy + 1); b.stamp('candles', cx + 1.4, cy + 1);
-        b.stamp('blood', cx + 0.4, cy - 0.3);
-        break;
-      case 'library':
-        for (let x = o.x + 1; x < o.x + o.w - 0.9; x += 2) b.stamp('bookshelf', x, o.y + 0.3);
-        b.stamp('table', cx, cy); b.stamp('chair', cx - 0.5, cy + 0.7); b.stamp('chair', cx + 0.5, cy - 0.7, Math.PI);
-        b.stamp('candles', cx + 0.6, cy);
-        break;
-      case 'prison':
-        for (let x = o.x + 0.5; x < o.x + o.w - 0.4; x += 1.2) b.stamp('cage', x, o.y + 0.5);
-        b.stamp('bones', ...free() as [number, number]); b.stamp('bones', ...free() as [number, number]);
-        b.stamp('chest', o.x + o.w - 0.6, o.y + o.h - 0.5);
-        break;
-      case 'barracks':
-        for (let x = o.x + 0.5; x < o.x + o.w - 0.4; x += 1.4) { b.stamp('bed', x, o.y + 1); b.stamp('chest', x, o.y + 2.3); }
-        b.stamp('table', cx, o.y + o.h - 1); b.stamp('stool', cx - 0.5, o.y + o.h - 0.35); b.stamp('stool', cx + 0.5, o.y + o.h - 0.35);
-        break;
-      default:
-        for (let k = 0; k < 3; k++) b.stamp(pick(r, ['rubble', 'bones', 'rocks', 'puddle']), ...free() as [number, number], r() * 6.28);
-    }
-    b.stamp('cobweb', o.x + 0.5, o.y + 0.5, 0);
-    if (r() < 0.3) b.stamp('cobweb', o.x + o.w - 0.5, o.y + o.h - 0.5, Math.PI);
-    if (r() < 0.35) b.paint('water', ...free() as [number, number], rrange(r, 0.6, 1.2), 0.2);
-    if (r() < 0.35) b.paint('moss', ...free() as [number, number], rrange(r, 0.8, 1.6), 0.1, 0.7);
-  });
-  void roomObjs;
 }
 
 // ------------------------------------------------------------------ cave

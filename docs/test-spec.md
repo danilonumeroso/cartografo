@@ -41,6 +41,7 @@ under test through the UI wherever practical (clicks, drags, keyboard).
    plus a "Your maps" section that says there are no maps yet.
 2. Choosing a template creates a map of the selected size, closes Home and opens the editor with a
    non-blank map rendered on the canvas. The new map appears in "Your maps" afterwards.
+   The Dungeon template first opens the dungeon generator (section 8); "Create map" then creates it.
 3. The four generator templates produce populated maps (rooms/caves/props as appropriate). "Empty"
    offers dark rock, grass or wood backgrounds.
 4. "Your maps" can search by name, duplicate a map (the copy gets a "(copy)" suffix) and delete a
@@ -133,6 +134,23 @@ under test through the UI wherever practical (clicks, drags, keyboard).
    enabled. Cave: one connected cave area. Tavern: a building with interior walls and doors.
 3. Regenerating replaces the previous content, tokens included (no leftover objects from the previous
    generation). Regenerating is not allowed while combat is active: the DM is asked to end combat first.
+
+### 8. Dungeon generator
+1. The generator screen offers a style (Rooms and corridors, Mixed with caves, Ruins), presets (Crypt,
+   Bandit hideout, Mine, Ruined temple, Fortress), map size (new maps only), a text seed with
+   "random" and "copy" buttons, and advanced options: number and size range of rooms, room shapes
+   (rectangular, round, cross-shaped, irregular), corridor width (1, 2, mixed), loops, dead ends,
+   natural cave share (Mixed style only), door, secret door and trap density, room themes, furniture
+   density, darkness, fog and room numbering.
+2. A large preview updates when options change and shows a summary (rooms, caves, loops, doors and
+   secret doors, traps). A strip of five variants uses the same options with different seeds; clicking
+   one makes it the current seed.
+3. The same seed and options always produce the same layout.
+4. Every generated dungeon, for every preset and for sizes from 10×10 up, is fully connected (all rooms
+   reachable), stays inside the map and has at least two rooms. Traps are always hidden from players.
+5. From an existing map, Map settings → Regenerate with "Dungeon" opens the generator in apply mode:
+   it shows a warning naming the map, keeps the map size and "Apply to …" replaces its content. This is
+   blocked while combat is active.
 
 ## Out of scope
 - Pixel-perfect visual comparisons of the painted terrain.

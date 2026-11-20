@@ -5,6 +5,7 @@ import { GEN_NAMES, GenKind } from '../generate';
 import { migrateDoc, MIN_SIZE, WallStyle } from '../model';
 import { deleteMap, getMap, listAssets, listMaps, putAsset, putMap, StoredMap } from '../storage';
 import { blobToDataURL, dataURLToBlob, downloadBlob, uid } from '../util';
+import { showGenerator } from './generator';
 import { FLOORS, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
 import { lang, LANGS, setLang, t } from '../i18n';
 
@@ -73,6 +74,7 @@ export function mapSettings(ed: Editor) {
       h('select', { onchange: (e: Event) => { gen = (e.target as HTMLSelectElement).value as GenKind; } }, ...Object.entries(GEN_NAMES).map(([k, v]) => h('option', { value: k }, v))),
       h('button', { class: 'chip-btn', onclick: () => {
         if (doc.combat.active) { toast(t('End combat before regenerating the map')); return; }
+        if (gen === 'dungeon') { close(); showGenerator(ed, 'apply'); return; }
         if (confirm(t('Replace everything with a generated map? This cannot be undone.'))) { close(); ed.regenerate(gen); }
       } }, icon('dice', 16), t('Regenerate'))),
     h('h3', null, t('Danger zone')),

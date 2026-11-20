@@ -25,7 +25,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 it('covers all translation calls and preserves every placeholder', () => {
-  const identical = new Set(['Dungeon', 'zoom', 'Round {n}']);
+  const identical = new Set(['Dungeon', 'zoom', 'Round {n}', 'Preset']);
   const issues = new Set<string>();
   function check(arg: ts.Expression) {
     if (ts.isConditionalExpression(arg)) { check(arg.whenTrue); check(arg.whenFalse); return; }

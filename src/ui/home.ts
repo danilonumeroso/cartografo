@@ -1,6 +1,7 @@
 import { h, icon } from '../dom';
 import type { Editor } from '../editor';
 import { iconBtn } from './common';
+import { showGenerator } from './generator';
 import { lang, t } from '../i18n';
 
 const BASE = import.meta.env.BASE_URL;
@@ -83,7 +84,7 @@ function render(ed: Editor) {
           h('div', null, h('h1', null, t('New map')), h('p', null, t('Pick a starting point: a generator gives you a complete map to polish.'))),
           sizeSeg),
         h('div', { class: 'tpl-grid' },
-          ...TEMPLATES.map((t) => h('button', { class: 'tpl', onclick: () => create(t.id, t.name) },
+          ...TEMPLATES.map((t) => h('button', { class: 'tpl', onclick: () => (t.id === 'dungeon' ? showGenerator(ed, 'new', size) : create(t.id, t.name)) },
             h('img', { class: 'tpl-img', src: BASE + t.img, alt: '' }),
             h('span', { class: 'tpl-text' }, h('strong', null, t.name), h('small', null, t.desc)))),
           empty)),
