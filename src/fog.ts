@@ -9,6 +9,8 @@ export class Fog {
   /** Mask-space dirty region not yet broadcast. */
   pending: Rect | null = null;
   changed = false;
+  /** Incremented on every edit, so callers can detect new changes. */
+  version = 0;
 
   constructor(W: number, H: number) {
     this.W = W; this.H = H;
@@ -24,6 +26,7 @@ export class Fog {
     this.refresh(c);
     this.pending = unionRect(this.pending, c);
     this.changed = true;
+    this.version++;
   }
 
   refresh(r: Rect = { x: 0, y: 0, w: this.mw, h: this.mh }) {

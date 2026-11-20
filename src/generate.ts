@@ -1,6 +1,6 @@
 import { CELL, Door, DoorKind, Label, MapDoc, Room, Stamp } from './model';
 import type { MapRuntime } from './runtime';
-import { STAMP_BY_ID, VARIANTS } from './stamps';
+import { STAMP_BY_ID, STAMP_PAD, VARIANTS } from './stamps';
 import { ctx2d, makeCanvas, mulberry32, pick, rint, Rng, rrange, uid } from './util';
 import { fbmTile, sampleWrap } from './noise';
 import { t } from './i18n';
@@ -12,6 +12,12 @@ class B {
   doc: MapDoc; r: Rng; rt: MapRuntime;
   constructor(rt: MapRuntime, seed: number) { this.rt = rt; this.doc = rt.doc; this.r = mulberry32(seed); }
   stamp(type: string, cx: number, cy: number, rot = 0, scale = 1): Stamp {
+    const def = STAMP_BY_ID.get(type);
+    if (def) {
+      const r = (Math.hypot(def.w, def.h) / 2) * scale + (STAMP_PAD + 6) / CELL;
+      const fit = (v: number, max: number) => (max > 2 * r ? Math.min(max - r, Math.max(r, v)) : max / 2);
+      cx = fit(cx, this.doc.cols); cy = fit(cy, this.doc.rows);
+    }
     const s: Stamp = { id: uid(), type, x: cx * CELL, y: cy * CELL, rot, scale, variant: Math.floor(this.r() * VARIANTS), flip: this.r() < 0.5 && !!STAMP_BY_ID.get(type) };
     this.doc.stamps.push(s);
     return s;
@@ -27,6 +33,7 @@ class B {
     return d;
   }
   label(text: string, cx: number, cy: number, size = 46, hidden = true): Label {
+    cx = Math.min(this.doc.cols - 0.5, Math.max(0.5, cx)); cy = Math.min(this.doc.rows - 0.5, Math.max(0.5, cy));
     const l: Label = { id: uid(), x: cx * CELL, y: cy * CELL, text, font: 'Cinzel', size, color: '#f3e6c4', stroke: '#1a120c', rot: 0, bold: true, hidden };
     this.doc.labels.push(l);
     return l;
@@ -45,6 +52,8 @@ class B {
 
 function reset(doc: MapDoc) {
   doc.rooms = []; doc.walls = []; doc.doors = []; doc.stamps = []; doc.lights = []; doc.labels = []; doc.markers = [];
+  doc.tokens = [];
+  doc.combat = { active: false, round: 1, turn: null, members: [] };
 }
 
 export function generate(rt: MapRuntime, kind: GenKind, seed = Date.now() % 100000) {
@@ -344,19 +353,21 @@ function tavern(b: B) {
   const { doc, r } = b;
   doc.bg = 'grass'; doc.wallStyle = 'wood'; doc.ambient = 0.15; doc.fogEnabled = false;
   const C = doc.cols, R = doc.rows;
-  const hw = Math.min(12, C - 8), hh = Math.min(8, R - 7);
-  const x0 = Math.floor((C - hw - 5) / 2), y0 = Math.max(2, Math.floor((R - hh) / 2) - 1);
-  const kw = 5;
+  const kw = C >= 16 ? 5 : 0;
+  const hw = Math.max(4, Math.min(12, C - 4 - kw)), hh = Math.max(4, Math.min(8, R - 6));
+  const x0 = Math.max(1, Math.floor((C - hw - kw) / 2)), y0 = Math.max(2, Math.min(Math.floor((R - hh) / 2) - 1, R - hh - 4));
   // street
   for (let x = -1; x <= C + 1; x += 0.6) b.paint('cobble', x, y0 + hh + 2.2, 1.6, 0.4, 0.8);
   b.room(x0, y0, hw, hh, 'wood', t('Common room'));
-  b.room(x0 + hw, y0, kw, Math.ceil(hh / 2), 'flagstone', t('Kitchen'));
-  b.room(x0 + hw, y0 + Math.ceil(hh / 2), kw, hh - Math.ceil(hh / 2), 'wood', t('Pantry'));
-  // inner walls
-  doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, y0 * CELL, (x0 + hw) * CELL, (y0 + hh) * CELL], style: 'wood' });
-  doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL, (x0 + hw + kw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL], style: 'wood' });
-  b.door(x0 + hw, y0 + 1.5, true);
-  b.door(x0 + hw, y0 + hh - 1.5, true);
+  if (kw) {
+    b.room(x0 + hw, y0, kw, Math.ceil(hh / 2), 'flagstone', t('Kitchen'));
+    b.room(x0 + hw, y0 + Math.ceil(hh / 2), kw, hh - Math.ceil(hh / 2), 'wood', t('Pantry'));
+    // inner walls
+    doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, y0 * CELL, (x0 + hw) * CELL, (y0 + hh) * CELL], style: 'wood' });
+    doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL, (x0 + hw + kw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL], style: 'wood' });
+    b.door(x0 + hw, y0 + 1.5, true);
+    b.door(x0 + hw, y0 + hh - 1.5, true);
+  }
   b.door(x0 + hw / 2, y0 + hh, false, 'double', 2);
   // common room
   b.stamp('counter', x0 + hw / 2, y0 + 1.3, 0, 1);
@@ -375,14 +386,16 @@ function tavern(b: B) {
     }
     if (r() < 0.6) b.stamp('candles', tx + 0.3, ty, 0, 0.7);
   }
-  // kitchen
   const kx = x0 + hw;
-  b.stamp('fireplace', kx + kw / 2, y0 + 0.45, 0, 0.9);
-  b.stamp('cauldron', kx + kw / 2, y0 + 1.4);
-  b.stamp('table', kx + kw / 2, y0 + Math.ceil(hh / 2) - 0.8, 0, 0.9);
-  b.stamp('barrels', kx + kw - 0.8, y0 + 1);
+  if (kw) {
+    // kitchen
+    b.stamp('fireplace', kx + kw / 2, y0 + 0.45, 0, 0.9);
+    b.stamp('cauldron', kx + kw / 2, y0 + 1.4);
+    b.stamp('table', kx + kw / 2, y0 + Math.ceil(hh / 2) - 0.8, 0, 0.9);
+    b.stamp('barrels', kx + kw - 0.8, y0 + 1);
+  }
   // pantry
-  for (let k = 0; k < 6; k++) b.stamp(pick(r, ['crate', 'barrel', 'sacks']), kx + 0.6 + rrange(r, 0, kw - 1.2), y0 + Math.ceil(hh / 2) + 0.6 + rrange(r, 0, hh - Math.ceil(hh / 2) - 1.2), r() * 6.28);
+  if (kw) for (let k = 0; k < 6; k++) b.stamp(pick(r, ['crate', 'barrel', 'sacks']), kx + 0.6 + rrange(r, 0, kw - 1.2), y0 + Math.ceil(hh / 2) + 0.6 + rrange(r, 0, hh - Math.ceil(hh / 2) - 1.2), r() * 6.28);
   // outside
   b.stamp('lamppost', x0 + hw / 2 - 2, y0 + hh + 1);
   b.stamp('lamppost', x0 + hw / 2 + 2, y0 + hh + 1);

@@ -5,7 +5,7 @@ import { MARGIN } from './engine';
 import { generate, GenKind } from './generate';
 import { History } from './history';
 import {
-  CELL, Combat, DoorKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
+  CELL, Combat, MIN_SIZE, DoorKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
 } from './model';
 import { buildTopbar, buildZoom, Intent, renderDock, renderRail, TOOL_INTENT, updateTopbar } from './ui/chrome';
 import { renderDrawer } from './ui/drawer';
@@ -95,6 +95,7 @@ export class Editor {
   private maskSnap: Map<string, HTMLCanvasElement> | null = null;
   private strokeRect: Rect | null = null;
   private masksDirtyForPlayers = false;
+  private fogVersion = -1;
   private saving: Promise<void> | null = null;
   private saveAgain = false;
   channel: Channel;
@@ -193,7 +194,8 @@ export class Editor {
   async createMap(o: { name: string; cols: number; rows: number; template: string }) {
     if (this.rt) await this.saveNow();
     const bg = o.template === 'outdoor' ? 'grass' : o.template === 'interior' ? 'wood' : 'rock';
-    const doc = newDoc(o.name, o.cols, o.rows, bg);
+    const size = (v: number) => Math.max(MIN_SIZE, Math.min(80, Math.round(v) || MIN_SIZE));
+    const doc = newDoc(o.name, size(o.cols), size(o.rows), bg);
     const rt = new MapRuntime(doc);
     if (['dungeon', 'cave', 'forest', 'tavern'].includes(o.template)) generate(rt, o.template as GenKind);
     this.showBusy(t('Painting the map…'));
@@ -207,6 +209,7 @@ export class Editor {
   }
 
   async regenerate(kind: GenKind) {
+    if (this.rt.doc.combat.active) { toast(t('End combat before regenerating the map')); return; }
     const rt = this.rt;
     this.showBusy(t('Generating…'));
     await nextFrame();
@@ -221,6 +224,7 @@ export class Editor {
 
   setRuntime(rt: MapRuntime) {
     this.rt = rt;
+    this.fogVersion = rt.fog.version;
     this.hideHome();
     this.discarded = false;
     this.sel = null;
@@ -275,10 +279,13 @@ export class Editor {
     this.saveSoon.cancel();
     if (this.saving) { this.saveAgain = true; return this.saving; }
     this.setSaveStatus('saving');
+    const rt = this.rt;
     this.saving = (async () => {
       try {
         const thumb = await this.makeThumb();
-        const rec = await this.rt.toStored(thumb);
+        const rec = await rt.toStored(thumb);
+        // The map may have been deleted or replaced while the thumbnail was encoding.
+        if (this.discarded || this.rt !== rt) { this.setSaveStatus('saved'); return; }
         await putMap(rec);
         let meta = this.maps.find((m) => m.id === rec.id);
         if (!meta) { meta = { id: rec.id, name: rec.name, updatedAt: rec.updatedAt, cols: rec.doc.cols, rows: rec.doc.rows }; this.maps.unshift(meta); }
@@ -310,7 +317,7 @@ export class Editor {
   // ======================================================================== history
   snap(): string {
     const d = this.rt.doc as any;
-    const o: any = { combat: d.combat };
+    const o: any = { combat: d.combat, fogEnabled: d.fogEnabled };
     for (const k of OBJECT_KEYS) o[k] = d[k];
     return JSON.stringify(o);
   }
@@ -329,6 +336,7 @@ export class Editor {
     this.invalidateRoomDiff(d.rooms, o.rooms);
     for (const k of OBJECT_KEYS) d[k] = o[k];
     d.combat = o.combat;
+    d.fogEnabled = !!o.fogEnabled;
     if (this.sel && !this.getSel()) this.sel = null;
     this.refreshUI();
     this.changed('objects');
@@ -538,7 +546,7 @@ export class Editor {
         if (this.opts.room.shape === 'rect') {
           const [cx, cy] = this.snapCorner(x, y);
           this.rectDraft = [cx, cy, cx, cy];
-          this.drag = { kind: 'rect' };
+          this.drag = { kind: 'rect', sx: x, sy: y, ex: x, ey: y };
         } else this.addDraftPoint(this.snapHalf(x, y), true);
         return;
       }
@@ -573,7 +581,6 @@ export class Editor {
         if (this.mode === 'session' && o.kind === 'monster') tok.hidden = true;
         this.snapToken(tok);
         this.mutate(t('Token'), () => { doc.tokens.push(tok); if (doc.combat.active) doc.combat.members.push(tok.id); });
-        this.select({ kind: 'token', id: tok.id });
         return;
       }
       case 'text': {
@@ -673,6 +680,7 @@ export class Editor {
       case 'rect': {
         const [cx, cy] = this.snapCorner(x, y);
         this.rectDraft![2] = cx; this.rectDraft![3] = cy;
+        d.ex = x; d.ey = y;
         break;
       }
       case 'measure': this.measure!.b = this.snapCenter(x, y); this.sendMeasure(); break;
@@ -722,7 +730,8 @@ export class Editor {
       case 'rect': {
         const [x0, y0, x1, y1] = this.rectDraft!;
         this.rectDraft = null;
-        if (Math.abs(x1 - x0) >= CELL && Math.abs(y1 - y0) >= CELL) {
+        const realDrag = Math.abs(d.ex - d.sx) >= CELL / 2 && Math.abs(d.ey - d.sy) >= CELL / 2;
+        if (realDrag && Math.abs(x1 - x0) >= CELL && Math.abs(y1 - y0) >= CELL) {
           const a = Math.min(x0, x1), b = Math.min(y0, y1), c = Math.max(x0, x1), dd = Math.max(y0, y1);
           this.addRoom([a, b, c, b, c, dd, a, dd]);
         }
@@ -895,6 +904,7 @@ export class Editor {
           this.rt.fog.refresh({ x: rx - 10, y: ry - 10, w: rw + 20, h: rh + 20 });
           this.rt.fog.pending = unionRect(this.rt.fog.pending, { x: rx - 10, y: ry - 10, w: rw + 20, h: rh + 20 });
           this.rt.fog.changed = true;
+          this.rt.fog.version++;
           this.requestRender();
           return;
         }
@@ -1013,16 +1023,21 @@ export class Editor {
 
   // ---- combat
   combat(): Combat { return this.rt.doc.combat; }
-  rollInitiative(which: 'all' | 'npc') {
+  /** Roll 1d20 + modifier for NPCs and monsters, and for player-side tokens that have no initiative yet. Returns how many were rolled. */
+  rollInitiative(_which: 'all' | 'npc' = 'npc'): number {
+    let rolled = 0;
     this.mutate(t('Initiative'), () => {
       for (const id of this.combat().members) {
-        const t = this.rt.doc.tokens.find((x) => x.id === id);
-        if (!t) continue;
-        if (which === 'npc' && t.kind === 'pc') continue;
-        t.init = 1 + Math.floor(Math.random() * 20) + t.initMod;
+        const tok = this.rt.doc.tokens.find((x) => x.id === id);
+        if (!tok) continue;
+        const playerSide = tok.kind === 'pc' || tok.kind === 'ally';
+        if (playerSide && tok.init !== null) continue;
+        tok.init = 1 + Math.floor(Math.random() * 20) + tok.initMod;
+        rolled++;
       }
       this.sortCombat();
     });
+    return rolled;
   }
   sortCombat() {
     const cb = this.combat(), toks = new Map(this.rt.doc.tokens.map((t) => [t.id, t]));
@@ -1124,7 +1139,7 @@ export class Editor {
       const p = this.rt.fog.takePatch();
       if (p) { this.channel.send({ t: 'fog', mapId: this.rt.doc.id, x: p.x, y: p.y, data: p.data }); this.saveSoon(); }
     } else this.rt.fog.pending = null;
-    if (this.rt.fog.changed) this.saveSoon();
+    if (this.rt.fog.version !== this.fogVersion) { this.fogVersion = this.rt.fog.version; this.saveSoon(); }
     if (!this.needRender) return;
     this.needRender = false;
     this.draw(t);

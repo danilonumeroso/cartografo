@@ -129,7 +129,7 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .busy[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- popovers + menus */
-.popover { position: fixed; z-index: 70; background: var(--panel-solid); border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); max-width: min(420px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; }
+.popover { position: fixed; z-index: 90; background: var(--panel-solid); border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); max-width: min(420px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; }
 .pop-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .pop-title { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 .pop-list { display: flex; flex-direction: column; gap: 2px; min-width: 200px; }

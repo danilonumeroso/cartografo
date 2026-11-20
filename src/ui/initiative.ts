@@ -1,4 +1,4 @@
-import { h, icon } from '../dom';
+import { h, icon, toast } from '../dom';
 import type { Editor } from '../editor';
 import { CONDITIONS, Token, TOKEN_KIND_COLORS } from '../model';
 import { iconBtn } from './common';
@@ -19,7 +19,7 @@ export function renderInitiative(ed: Editor) {
     h('div', { class: 'init-titles' },
       h('small', null, cb.active ? t('Combat') : t('Initiative')),
       h('strong', null, cb.active ? t('Round {n}', { n: cb.round }) : members.length ? t('Ready to fight') : t('No combat'))),
-    members.length ? h('button', { class: 'chip-btn', title: t('Roll 1d20 + modifier for NPCs and monsters'), onclick: () => { ed.rollInitiative('npc'); rr(); } }, icon('dice', 16), t('Roll')) : ''));
+    members.length ? h('button', { class: 'chip-btn', title: t('Roll 1d20 + modifier for NPCs, monsters and anyone without initiative'), onclick: () => { const n = ed.rollInitiative(); toast(n ? t('Rolled initiative for {n}', { n }) : t('Everyone already has an initiative')); rr(); } }, icon('dice', 16), t('Roll')) : ''));
 
   const list = h('ol', { class: 'init-rows' });
   for (const t of members) list.append(row(ed, t, true));

@@ -454,4 +454,8 @@ export const IT: Record<string, string> = {
   "{n} days ago": "{n} giorni fa",
   "{n} sq.": "{n} cas.",
   "{n} weeks ago": "{n} settimane fa",
+  "Roll 1d20 + modifier for NPCs, monsters and anyone without initiative": "Tira 1d20 + modificatore per PNG, mostri e chi non ha ancora l'iniziativa",
+  "Rolled initiative for {n}": "Iniziativa tirata per {n}",
+  "Everyone already has an initiative": "Hanno già tutti un'iniziativa",
+  "End combat before regenerating the map": "Termina il combattimento prima di rigenerare la mappa",
 };

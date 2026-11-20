@@ -2,7 +2,7 @@ import { assets } from '../assets';
 import { check, h, icon, modal, pickFile, toast } from '../dom';
 import type { Editor } from '../editor';
 import { GEN_NAMES, GenKind } from '../generate';
-import { migrateDoc, WallStyle } from '../model';
+import { migrateDoc, MIN_SIZE, WallStyle } from '../model';
 import { deleteMap, getMap, listAssets, listMaps, putAsset, putMap, StoredMap } from '../storage';
 import { blobToDataURL, dataURLToBlob, downloadBlob, uid } from '../util';
 import { FLOORS, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
@@ -40,8 +40,8 @@ async function switchLang(ed: Editor) {
 export function mapSettings(ed: Editor) {
   const doc = ed.rt.doc, g = doc.grid;
   const name = h('input', { type: 'text', value: doc.name, oninput: () => { doc.name = name.value; ed.updateTitle(); ed.changed('settings'); } });
-  const cols = h('input', { type: 'number', value: doc.cols, min: 5, max: 80, class: 'num-sm' });
-  const rows = h('input', { type: 'number', value: doc.rows, min: 5, max: 80, class: 'num-sm' });
+  const cols = h('input', { type: 'number', value: doc.cols, min: MIN_SIZE, max: 80, class: 'num-sm' });
+  const rows = h('input', { type: 'number', value: doc.rows, min: MIN_SIZE, max: 80, class: 'num-sm' });
   const grid = h('input', { type: 'color', value: g.color, oninput: () => { g.color = grid.value; ed.changed('objects'); } });
   const feet = h('input', { type: 'number', value: g.feet, min: 1, max: 100, class: 'num-sm', onchange: () => { g.feet = +feet.value || 5; ed.changed('objects'); } });
   let gen: GenKind = 'dungeon';
@@ -53,7 +53,8 @@ export function mapSettings(ed: Editor) {
     h('label', { class: 'field' }, h('span', { class: 'field-label' }, t('Name')), name),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Size in squares (the top-left corner stays put)')),
       h('div', { class: 'row' }, cols, h('span', null, '×'), rows, h('button', { class: 'chip-btn', onclick: () => {
-        const c = Math.max(5, Math.min(80, +cols.value)), r = Math.max(5, Math.min(80, +rows.value));
+        const c = Math.max(MIN_SIZE, Math.min(80, +cols.value || MIN_SIZE)), r = Math.max(MIN_SIZE, Math.min(80, +rows.value || MIN_SIZE));
+        cols.value = String(c); rows.value = String(r);
         if (c === doc.cols && r === doc.rows) return;
         ed.rt.resize(c, r); ed.hist.clear(); ed.fitView(); ed.changed('masks'); toast(t('Map resized'));
       } }, t('Apply')))),
@@ -70,7 +71,10 @@ export function mapSettings(ed: Editor) {
     h('h3', null, t('Regenerate')),
     h('div', { class: 'row' },
       h('select', { onchange: (e: Event) => { gen = (e.target as HTMLSelectElement).value as GenKind; } }, ...Object.entries(GEN_NAMES).map(([k, v]) => h('option', { value: k }, v))),
-      h('button', { class: 'chip-btn', onclick: () => { if (confirm(t('Replace everything with a generated map? This cannot be undone.'))) { close(); ed.regenerate(gen); } } }, icon('dice', 16), t('Regenerate'))),
+      h('button', { class: 'chip-btn', onclick: () => {
+        if (doc.combat.active) { toast(t('End combat before regenerating the map')); return; }
+        if (confirm(t('Replace everything with a generated map? This cannot be undone.'))) { close(); ed.regenerate(gen); }
+      } }, icon('dice', 16), t('Regenerate'))),
     h('h3', null, t('Danger zone')),
     h('button', { class: 'chip-btn danger', onclick: async () => {
       if (!confirm(t('Permanently delete “{name}”?', { name: doc.name }))) return;

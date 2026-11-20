@@ -5,6 +5,8 @@ import { t } from './i18n';
 export const CELL = 100;
 /** Resolution of paint masks relative to world pixels. */
 export const MASK_SCALE = 0.5;
+/** Smallest supported map side, in squares. */
+export const MIN_SIZE = 10;
 
 export type WallStyle = 'stone' | 'brick' | 'wood' | 'cave';
 export type DoorKind = 'wood' | 'double' | 'iron' | 'secret' | 'arch';
