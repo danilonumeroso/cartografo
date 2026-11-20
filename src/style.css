@@ -202,3 +202,4 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-bottom-width:
 .player-settings .modal-body { gap: 10px; }
 .player-settings .row input[type=range] { flex: 1; width: auto; }
 .player-settings .row input[type=number] { width: 80px; }
+.init-chip-conds { display: inline-flex; gap: 1px; font-size: 14px; }

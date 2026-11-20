@@ -1,7 +1,7 @@
 import { assets } from './assets';
 import { Channel, Msg } from './channel';
 import { h } from './dom';
-import { CELL, hpStatus, MapDoc, Marker, TOKEN_KIND_COLORS } from './model';
+import { CELL, CONDITIONS, MapDoc, Marker, TOKEN_KIND_COLORS } from './model';
 import { drawMeasure, drawPing, markerGeom, renderScene, View } from './render';
 import { MapRuntime } from './runtime';
 import { getMap } from './storage';
@@ -216,9 +216,11 @@ export class Player {
     for (const id of cb.members) {
       const t = toks.get(id);
       if (!t || t.hidden) continue;
-      const hp = t.kind === 'pc' || t.kind === 'ally' ? `${t.hp}/${t.maxHp}` : hpStatus(t);
+      // No health info for players: only name and conditions.
+      const conds = t.conditions.map((c) => CONDITIONS.find((x) => x.id === c)).filter(Boolean);
       this.initBar.append(h('div', { class: 'init-chip' + (cb.turn === id ? ' turn' : '') + (t.hp <= 0 && t.maxHp > 0 ? ' dead' : '') },
-        h('span', { class: 'dot', style: { background: TOKEN_KIND_COLORS[t.kind] } }), h('b', null, t.name), h('small', null, hp)));
+        h('span', { class: 'dot', style: { background: TOKEN_KIND_COLORS[t.kind] } }), h('b', null, t.name),
+        conds.length ? h('span', { class: 'init-chip-conds' }, ...conds.map((c) => h('span', { title: c!.name }, c!.icon))) : null));
     }
     this.initBar.hidden = false;
   }

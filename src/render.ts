@@ -342,7 +342,8 @@ export function drawToken(ctx: C2D, t: Token, z: number, o: RenderOpts) {
     ctx.beginPath(); ctx.moveTo(-R * 0.45, -R * 0.45); ctx.lineTo(R * 0.45, R * 0.45); ctx.moveTo(R * 0.45, -R * 0.45); ctx.lineTo(-R * 0.45, R * 0.45); ctx.stroke();
   }
   // HP bar
-  const showHp = t.maxHp > 0 && (!o.player || t.kind === 'pc' || t.kind === 'ally');
+  // Health is DM-only: players never see HP bars, only conditions.
+  const showHp = t.maxHp > 0 && !o.player;
   if (showHp) {
     const bw = R * 1.5, bh = Math.max(7, R * 0.16), by = R + 4;
     const f = Math.max(0, Math.min(1, t.hp / t.maxHp));
