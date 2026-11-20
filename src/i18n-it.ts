@@ -533,4 +533,13 @@ export const IT: Record<string, string> = {
   "{n} loop": "{n} anello",
   "{n} door · {s} secret": "{n} porta · {s} segrete",
   "{n} trap": "{n} trappola",
+  "Layout": "Disposizione",
+  "Automatic": "Automatica",
+  "Sparse": "Sparsa",
+  "Compact": "Compatta",
+  "Organic": "Organica",
+  "Chosen by the style: sparse for rooms and corridors, organic for caves and ruins.": "Decide lo stile: sparsa per stanze e corridoi, organica per caverne e rovine.",
+  "Isolated rooms in the rock, long corridors.": "Stanze isolate nella roccia, corridoi lunghi.",
+  "Rooms packed together to fill the map, short corridors.": "Stanze fitte che riempiono la mappa, corridoi corti.",
+  "Winding passages and irregular connections.": "Gallerie che serpeggiano e collegamenti irregolari.",
 };

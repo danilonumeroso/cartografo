@@ -8,9 +8,13 @@ export type DungeonStyle = 'rooms' | 'mixed' | 'ruins';
 export type RoomShape = 'rect' | 'round' | 'cross' | 'irregular';
 export type RoomTheme = 'crypt' | 'ritual' | 'prison' | 'storage' | 'throne' | 'library' | 'barracks';
 export type PresetId = 'crypt' | 'bandits' | 'mine' | 'temple' | 'fortress';
+/** How rooms are laid out and connected. 'auto' follows the style. */
+export type DungeonLayout = 'auto' | 'sparse' | 'compact' | 'organic';
+export const LAYOUTS: DungeonLayout[] = ['auto', 'sparse', 'compact', 'organic'];
 
 export interface DungeonParams {
   style: DungeonStyle;
+  layout: DungeonLayout;
   rooms: number;
   minSize: number;
   maxSize: number;
@@ -45,23 +49,23 @@ export const PRESET_ORDER: PresetId[] = ['crypt', 'bandits', 'mine', 'temple', '
 
 export const PRESETS: Record<PresetId, DungeonParams> = {
   crypt: {
-    style: 'rooms', rooms: 10, minSize: 3, maxSize: 6, shapes: ['rect', 'round'], corridorWidth: 1, loops: 1, deadEnds: 1, caveShare: 0,
+    layout: 'auto', style: 'rooms', rooms: 10, minSize: 3, maxSize: 6, shapes: ['rect', 'round'], corridorWidth: 1, loops: 1, deadEnds: 1, caveShare: 0,
     doors: 75, secretDoors: 15, traps: 1, themes: ['crypt', 'ritual', 'prison'], furniture: 2, ambient: 0.6, fog: true, numbers: true,
   },
   bandits: {
-    style: 'mixed', rooms: 8, minSize: 4, maxSize: 8, shapes: ['rect', 'irregular'], corridorWidth: 0, loops: 1, deadEnds: 2, caveShare: 40,
+    layout: 'auto', style: 'mixed', rooms: 8, minSize: 4, maxSize: 8, shapes: ['rect', 'irregular'], corridorWidth: 0, loops: 1, deadEnds: 2, caveShare: 40,
     doors: 50, secretDoors: 10, traps: 2, themes: ['storage', 'barracks', 'throne'], furniture: 3, ambient: 0.45, fog: true, numbers: true,
   },
   mine: {
-    style: 'mixed', rooms: 9, minSize: 3, maxSize: 6, shapes: ['rect'], corridorWidth: 1, loops: 2, deadEnds: 3, caveShare: 70,
+    layout: 'auto', style: 'mixed', rooms: 9, minSize: 3, maxSize: 6, shapes: ['rect'], corridorWidth: 1, loops: 2, deadEnds: 3, caveShare: 70,
     doors: 30, secretDoors: 5, traps: 1, themes: ['storage'], furniture: 2, ambient: 0.65, fog: true, numbers: true,
   },
   temple: {
-    style: 'ruins', rooms: 9, minSize: 4, maxSize: 8, shapes: ['round', 'cross', 'irregular'], corridorWidth: 2, loops: 2, deadEnds: 0, caveShare: 0,
+    layout: 'auto', style: 'ruins', rooms: 9, minSize: 4, maxSize: 8, shapes: ['round', 'cross', 'irregular'], corridorWidth: 2, loops: 2, deadEnds: 0, caveShare: 0,
     doors: 30, secretDoors: 20, traps: 2, themes: ['ritual', 'throne', 'library'], furniture: 1, ambient: 0.5, fog: true, numbers: true,
   },
   fortress: {
-    style: 'rooms', rooms: 14, minSize: 4, maxSize: 9, shapes: ['rect', 'cross'], corridorWidth: 2, loops: 3, deadEnds: 1, caveShare: 0,
+    layout: 'compact', style: 'rooms', rooms: 14, minSize: 4, maxSize: 9, shapes: ['rect', 'cross'], corridorWidth: 2, loops: 3, deadEnds: 1, caveShare: 0,
     doors: 90, secretDoors: 10, traps: 1, themes: ['barracks', 'storage', 'throne', 'library', 'prison'], furniture: 3, ambient: 0.35, fog: true, numbers: true,
   },
 };
@@ -74,6 +78,18 @@ export const presetDesc = (p: PresetId) => ({
   temple: t('Crumbling halls of odd shapes, wide passages, rubble and moss.'),
   fortress: t('Many regular rooms, wide corridors and doors everywhere.'),
 })[p];
+export const layoutName = (l: DungeonLayout) => ({ auto: t('Automatic'), sparse: t('Sparse'), compact: t('Compact'), organic: t('Organic') })[l];
+export const layoutDesc = (l: DungeonLayout) => ({
+  auto: t('Chosen by the style: sparse for rooms and corridors, organic for caves and ruins.'),
+  sparse: t('Isolated rooms in the rock, long corridors.'),
+  compact: t('Rooms packed together to fill the map, short corridors.'),
+  organic: t('Winding passages and irregular connections.'),
+})[l];
+/** The concrete layout used for a set of parameters. */
+export function resolveLayout(p: DungeonParams): Exclude<DungeonLayout, 'auto'> {
+  if (p.layout && p.layout !== 'auto') return p.layout;
+  return p.style === 'rooms' ? 'sparse' : 'organic';
+}
 export const styleName = (s: DungeonStyle) => ({ rooms: t('Rooms and corridors'), mixed: t('Mixed with caves'), ruins: t('Ruins') })[s];
 export const shapeName = (s: RoomShape) => ({ rect: t('Rectangular'), round: t('Round'), cross: t('Cross-shaped'), irregular: t('Irregular') })[s];
 export const themeName = (s: RoomTheme) => ({ crypt: t('Crypt'), ritual: t('Ritual'), prison: t('Prison'), storage: t('Storeroom'), throne: t('Throne room'), library: t('Library'), barracks: t('Barracks') })[s];
@@ -119,11 +135,54 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
   maxS = Math.min(maxS, cap); minS = Math.min(minS, maxS);
 
   // ------------------------------------------------------------------ rooms
+  const layout = resolveLayout(params);
   const owner = new Int16Array(C * R).fill(-1);
   const rooms: RoomInfo[] = [];
   const polys: number[][] = [];
   const target = Math.max(2, Math.round(params.rooms));
-  for (let a = 0; a < 600 && rooms.length < target; a++) {
+  /** Turn a rectangle into a room of a random allowed shape; returns false if it covers no cell. */
+  const addRoom = (x: number, y: number, w: number, h: number) => {
+    let shape = pick(r, shapes);
+    if ((shape === 'round' || shape === 'cross') && (w < 3 || h < 3)) shape = 'rect';
+    if (shape === 'irregular' && (w < 4 || h < 4)) shape = 'rect';
+    const pts = roomPolygon(r, shape, x, y, w, h);
+    const cells = new Set<number>();
+    for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++) if (pointInPoly(cx + 0.5, cy + 0.5, pts)) cells.add(idx(cx, cy));
+    if (!cells.size) return false;
+    let best = [x, y] as [number, number], bd = Infinity;
+    for (const c of cells) { const cx = c % C, cy = (c / C) | 0; const d = Math.hypot(cx + 0.5 - (x + w / 2), cy + 0.5 - (y + h / 2)); if (d < bd) { bd = d; best = [cx, cy]; } }
+    const i = rooms.length;
+    for (const c of cells) owner[c] = i;
+    const floor = params.style === 'ruins' ? pick(r, ['flagstone', 'cobble', 'cave', 'tiles']) : r() < 0.2 ? 'tiles' : 'flagstone';
+    rooms.push({ x, y, w, h, shape, cave: false, cells, anchor: best, floor });
+    polys.push(pts);
+    return true;
+  };
+
+  if (layout === 'compact') {
+    // Binary space partition: split the largest area until there is one leaf per room, then put a room in each leaf.
+    const minLeaf = minS + 1;
+    const nodes = [{ x: 1, y: 1, w: C - 2, h: R - 2 }];
+    while (nodes.length < target) {
+      nodes.sort((p1, p2) => p2.w * p2.h - p1.w * p1.h);
+      const n = nodes.find((q) => q.w >= minLeaf * 2 || q.h >= minLeaf * 2);
+      if (!n) break;
+      const canV = n.w >= minLeaf * 2, canH = n.h >= minLeaf * 2;
+      const vertical = canV && (!canH || (n.w > n.h ? r() < 0.8 : r() < 0.2));
+      nodes.splice(nodes.indexOf(n), 1);
+      if (vertical) { const cut = rint(r, minLeaf, n.w - minLeaf); nodes.push({ ...n, w: cut }, { ...n, x: n.x + cut, w: n.w - cut }); }
+      else { const cut = rint(r, minLeaf, n.h - minLeaf); nodes.push({ ...n, h: cut }, { ...n, y: n.y + cut, h: n.h - cut }); }
+    }
+    for (const n of nodes) {
+      // leave one cell free on the right/bottom so neighbouring rooms keep a wall between them
+      const w = rint(r, Math.min(minS, n.w - 1), Math.max(Math.min(minS, n.w - 1), Math.min(maxS, n.w - 1)));
+      const h = rint(r, Math.min(minS, n.h - 1), Math.max(Math.min(minS, n.h - 1), Math.min(maxS, n.h - 1)));
+      if (w < 2 || h < 2) continue;
+      addRoom(n.x + rint(r, 0, n.w - 1 - w), n.y + rint(r, 0, n.h - 1 - h), w, h);
+    }
+  }
+  // sparse/organic layouts, and fallback when a partition could not fit two rooms
+  if (rooms.length < 2) for (let a = 0; a < 600 && rooms.length < target; a++) {
     // small maps: shrink rooms and spacing until they fit
     if (a > 0 && a % 120 === 0 && rooms.length < Math.min(target, 3)) {
       if (maxS > minS) maxS--; else if (minS > 2) { minS--; maxS = Math.max(maxS, minS); }
@@ -133,20 +192,7 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     const x = rint(r, 1, C - w - 1), y = rint(r, 1, R - h - 1);
     if (x < 1 || y < 1 || x + w > C - 1 || y + h > R - 1) continue;
     if (rooms.some((o) => x < o.x + o.w + gap && o.x < x + w + gap && y < o.y + o.h + gap && o.y < y + h + gap)) continue;
-    let shape = pick(r, shapes);
-    if ((shape === 'round' || shape === 'cross') && (w < 3 || h < 3)) shape = 'rect';
-    if (shape === 'irregular' && (w < 4 || h < 4)) shape = 'rect';
-    const pts = roomPolygon(r, shape, x, y, w, h);
-    const cells = new Set<number>();
-    for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++) if (pointInPoly(cx + 0.5, cy + 0.5, pts)) cells.add(idx(cx, cy));
-    if (!cells.size) continue;
-    let best = [x, y] as [number, number], bd = Infinity;
-    for (const c of cells) { const cx = c % C, cy = (c / C) | 0; const d = Math.hypot(cx + 0.5 - (x + w / 2), cy + 0.5 - (y + h / 2)); if (d < bd) { bd = d; best = [cx, cy]; } }
-    const i = rooms.length;
-    for (const c of cells) owner[c] = i;
-    const floor = params.style === 'ruins' ? pick(r, ['flagstone', 'cobble', 'cave', 'tiles']) : r() < 0.2 ? 'tiles' : 'flagstone';
-    rooms.push({ x, y, w, h, shape, cave: false, cells, anchor: best, floor });
-    polys.push(pts);
+    addRoom(x, y, w, h);
   }
   stats.rooms = rooms.length;
   if (!rooms.length) return stats;
@@ -171,22 +217,47 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
   const dist = (a: RoomInfo, c: RoomInfo) => Math.abs(a.anchor[0] - c.anchor[0]) + Math.abs(a.anchor[1] - c.anchor[1]);
   const links: [number, number][] = [];
   const linked = new Set<string>();
-  const inTree = new Set([0]);
-  while (inTree.size < rooms.length) {
-    let bestL: [number, number, number] | null = null;
-    for (const i of inTree) for (let j = 0; j < rooms.length; j++) {
-      if (inTree.has(j)) continue;
-      const d = dist(rooms[i], rooms[j]);
-      if (!bestL || d < bestL[2]) bestL = [i, j, d];
-    }
-    if (!bestL) break;
-    links.push([bestL[0], bestL[1]]); linked.add(`${Math.min(bestL[0], bestL[1])}-${Math.max(bestL[0], bestL[1])}`); inTree.add(bestL[1]);
-  }
+  const key = (i: number, j: number) => `${Math.min(i, j)}-${Math.max(i, j)}`;
   const extra = Math.round([0, 1, 2, 3, 5][Math.max(0, Math.min(4, params.loops))] * (rooms.length >= 6 ? 1 : 0.5));
-  const candidates: [number, number, number][] = [];
-  for (let i = 0; i < rooms.length; i++) for (let j = i + 1; j < rooms.length; j++) if (!linked.has(`${i}-${j}`)) candidates.push([i, j, dist(rooms[i], rooms[j])]);
-  candidates.sort((a, c) => a[2] - c[2]);
-  for (const [i, j] of candidates.slice(0, Math.max(0, Math.min(candidates.length, extra * 2))).sort(() => r() - 0.5).slice(0, extra)) { links.push([i, j]); stats.loops++; }
+  if (layout === 'organic') {
+    // Delaunay graph of the room anchors: spanning tree first (Kruskal), loops from the remaining edges.
+    const pts = rooms.map((o) => [o.anchor[0] + r() * 1e-3, o.anchor[1] + r() * 1e-3] as [number, number]);
+    let edges = delaunayEdges(pts);
+    if (!edges.length) for (let i = 0; i < rooms.length; i++) for (let j = i + 1; j < rooms.length; j++) edges.push([i, j]);
+    const len = ([i, j]: [number, number]) => Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+    edges = edges.sort((e1, e2) => len(e1) - len(e2));
+    const parent = rooms.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const rest: [number, number][] = [];
+    for (const e of edges) {
+      const [ri, rj] = [find(e[0]), find(e[1])];
+      if (ri !== rj) { parent[ri] = rj; links.push(e); linked.add(key(e[0], e[1])); } else rest.push(e);
+    }
+    // safety net for degenerate triangulations: join any group still apart to its nearest room
+    for (let i = 1; i < rooms.length; i++) {
+      if (find(i) === find(0)) continue;
+      let best: [number, number] | null = null, bd = Infinity;
+      for (let j = 0; j < rooms.length; j++) if (find(j) === find(0) && dist(rooms[i], rooms[j]) < bd) { bd = dist(rooms[i], rooms[j]); best = [i, j]; }
+      if (best) { parent[find(i)] = find(0); links.push(best); }
+    }
+    for (const e of rest.sort(() => r() - 0.5).slice(0, extra)) { links.push(e); stats.loops++; }
+  } else {
+    const inTree = new Set([0]);
+    while (inTree.size < rooms.length) {
+      let bestL: [number, number, number] | null = null;
+      for (const i of inTree) for (let j = 0; j < rooms.length; j++) {
+        if (inTree.has(j)) continue;
+        const d = dist(rooms[i], rooms[j]);
+        if (!bestL || d < bestL[2]) bestL = [i, j, d];
+      }
+      if (!bestL) break;
+      links.push([bestL[0], bestL[1]]); linked.add(key(bestL[0], bestL[1])); inTree.add(bestL[1]);
+    }
+    const candidates: [number, number, number][] = [];
+    for (let i = 0; i < rooms.length; i++) for (let j = i + 1; j < rooms.length; j++) if (!linked.has(key(i, j))) candidates.push([i, j, dist(rooms[i], rooms[j])]);
+    candidates.sort((p1, p2) => p1[2] - p2[2]);
+    for (const [i, j] of candidates.slice(0, Math.max(0, Math.min(candidates.length, extra * 2))).sort(() => r() - 0.5).slice(0, extra)) { links.push([i, j]); stats.loops++; }
+  }
 
   const corridorCells = new Set<number>();
   const doorAt = new Set<string>();
@@ -261,11 +332,34 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     if (r() < 0.5) { step(bx, ay); step(bx, by); } else { step(ax, by); step(bx, by); }
     return path;
   };
+  /** Biased random walk towards the target (a "drunkard walk"), finished with an L if it runs out of steps. */
+  const windingPath = (ax: number, ay: number, bx: number, by: number, wiggle = 0.3): [number, number][] => {
+    const path: [number, number][] = [[ax, ay]];
+    let x = ax, y = ay;
+    const limit = (Math.abs(bx - ax) + Math.abs(by - ay)) * 4 + 20;
+    for (let steps = 0; (x !== bx || y !== by) && steps < limit; steps++) {
+      const dx = Math.sign(bx - x), dy = Math.sign(by - y);
+      let mx = 0, my = 0;
+      if (r() >= wiggle) {
+        if (dx && dy) { if (r() < Math.abs(bx - x) / (Math.abs(bx - x) + Math.abs(by - y))) mx = dx; else my = dy; }
+        else if (dx) mx = dx; else my = dy;
+      } else if (r() < 0.5) mx = r() < 0.5 ? 1 : -1; else my = r() < 0.5 ? 1 : -1;
+      const nx = x + mx, ny = y + my;
+      if (nx < 1 || ny < 1 || nx > C - 2 || ny > R - 2) continue;
+      x = nx; y = ny;
+      path.push([x, y]);
+    }
+    if (x !== bx || y !== by) path.push(...lPath(x, y, bx, by).slice(1));
+    return path;
+  };
+  // built corridors wiggle less than natural tunnels, to avoid a staircase look
+  const route = (ax: number, ay: number, bx: number, by: number, tunnel: boolean) =>
+    layout === 'organic' ? windingPath(ax, ay, bx, by, tunnel ? 0.3 : 0.12) : lPath(ax, ay, bx, by);
   for (const [i, j] of links) {
     const A = rooms[i], Bm = rooms[j];
     const w = params.corridorWidth || (r() < 0.5 ? 1 : 2);
     const tunnel = params.style === 'mixed' && (A.cave || Bm.cave) && (A.cave && Bm.cave ? true : r() < 0.5);
-    carve(lPath(A.anchor[0], A.anchor[1], Bm.anchor[0], Bm.anchor[1]), w, tunnel);
+    carve(route(A.anchor[0], A.anchor[1], Bm.anchor[0], Bm.anchor[1], tunnel), w, tunnel);
   }
 
   // dead ends: short blind passages leaving a room
@@ -278,8 +372,12 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     while (owner[idx(x, y)] === i) { x += dx; y += dy; if (x < 1 || y < 1 || x >= C - 1 || y >= R - 1) break; path.push([x, y]); }
     let len = 0;
     const want = rint(r, 3, 6);
+    let [ddx, ddy] = [dx, dy];
     while (len < want) {
-      const nx = x + dx, ny = y + dy;
+      // organic layouts: occasionally turn sideways, without ever turning back
+      if (layout === 'organic' && len > 0 && r() < 0.3) [ddx, ddy] = r() < 0.5 ? [ddy, ddx] : [-ddy, -ddx];
+      if (ddx === -dx && ddy === -dy) [ddx, ddy] = [dx, dy];
+      const nx = x + ddx, ny = y + ddy;
       if (nx < 1 || ny < 1 || nx >= C - 2 || ny >= R - 2 || owner[idx(nx, ny)] >= 0 || corridorCells.has(idx(nx, ny))) break;
       x = nx; y = ny; path.push([x, y]); len++;
     }
@@ -445,4 +543,42 @@ function roomPolygon(r: () => number, shape: RoomShape, x: number, y: number, w:
     default:
       return [x, y, x + w, y, x + w, y + h, x, y + h];
   }
+}
+
+/** Edges of the Delaunay triangulation of a small point set (Bowyer–Watson). */
+function delaunayEdges(pts: [number, number][]): [number, number][] {
+  const n = pts.length;
+  if (n < 2) return [];
+  if (n === 2) return [[0, 1]];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of pts) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+  const d = Math.max(maxX - minX, maxY - minY, 1) * 20, mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+  const P: [number, number][] = [...pts, [mx - d, my - d], [mx, my + d], [mx + d, my - d]];
+  type Tri = { a: number; b: number; c: number; cx: number; cy: number; r2: number };
+  const tri = (a: number, b: number, c: number): Tri => {
+    const [ax, ay] = P[a], [bx, by] = P[b], [cx, cy] = P[c];
+    const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)) || 1e-9;
+    const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / D;
+    const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / D;
+    return { a, b, c, cx: ux, cy: uy, r2: (ax - ux) ** 2 + (ay - uy) ** 2 };
+  };
+  let tris: Tri[] = [tri(n, n + 1, n + 2)];
+  for (let i = 0; i < n; i++) {
+    const [px, py] = P[i];
+    const bad = tris.filter((t) => (px - t.cx) ** 2 + (py - t.cy) ** 2 < t.r2);
+    const count = new Map<string, [number, number, number]>();
+    for (const t of bad) for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) {
+      const k = u < v ? `${u}-${v}` : `${v}-${u}`;
+      const e = count.get(k);
+      count.set(k, e ? [e[0], e[1], e[2] + 1] : [u, v, 1]);
+    }
+    tris = tris.filter((t) => !bad.includes(t));
+    for (const [u, v, c] of count.values()) if (c === 1) tris.push(tri(u, v, i));
+  }
+  const out = new Map<string, [number, number]>();
+  for (const t of tris) for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) {
+    if (u >= n || v >= n) continue;
+    out.set(u < v ? `${u}-${v}` : `${v}-${u}`, [Math.min(u, v), Math.max(u, v)]);
+  }
+  return [...out.values()];
 }

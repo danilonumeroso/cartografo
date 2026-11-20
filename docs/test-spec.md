@@ -139,14 +139,15 @@ under test through the UI wherever practical (clicks, drags, keyboard).
 1. The generator screen offers a style (Rooms and corridors, Mixed with caves, Ruins), presets (Crypt,
    Bandit hideout, Mine, Ruined temple, Fortress), map size (new maps only), a text seed with
    "random" and "copy" buttons, and advanced options: number and size range of rooms, room shapes
-   (rectangular, round, cross-shaped, irregular), corridor width (1, 2, mixed), loops, dead ends,
+   (rectangular, round, cross-shaped, irregular), layout (Automatic, Sparse, Compact, Organic; presets set
+   their own, e.g. Fortress is Compact), corridor width (1, 2, mixed), loops, dead ends,
    natural cave share (Mixed style only), door, secret door and trap density, room themes, furniture
    density, darkness, fog and room numbering.
 2. A large preview updates when options change and shows a summary (rooms, caves, loops, doors and
    secret doors, traps). A strip of five variants uses the same options with different seeds; clicking
    one makes it the current seed.
 3. The same seed and options always produce the same layout.
-4. Every generated dungeon, for every preset and for sizes from 10×10 up, is fully connected (all rooms
+4. Every generated dungeon, for every preset and layout and for sizes from 10×10 up, is fully connected (all rooms
    reachable), stays inside the map and has at least two rooms. Traps are always hidden from players.
 5. From an existing map, Map settings → Regenerate with "Dungeon" opens the generator in apply mode:
    it shows a warning naming the map, keeps the map size and "Apply to …" replaces its content. This is

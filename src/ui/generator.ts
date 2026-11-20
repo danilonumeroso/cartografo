@@ -1,6 +1,6 @@
 import { h, icon, toast } from '../dom';
 import {
-  DungeonParams, DungeonStats, DungeonStyle, generateDungeon, levelName, PRESET_ORDER, PresetId, presetDesc, presetName, PRESETS,
+  DungeonLayout, DungeonParams, DungeonStats, DungeonStyle, generateDungeon, LAYOUTS, layoutDesc, layoutName, levelName, PRESET_ORDER, PresetId, presetDesc, presetName, PRESETS,
   randomSeed, ROOM_SHAPES, ROOM_THEMES, RoomShape, RoomTheme, seedPrefix, shapeName, styleName, themeName,
 } from '../dungeon';
 import type { Editor } from '../editor';
@@ -190,6 +190,9 @@ function render(ed: Editor) {
         range(t('Largest room'), p.maxSize, 3, 14, 1, (v) => t('{n} sq.', { n: v }), (v) => { p.maxSize = v; if (p.minSize > v) p.minSize = v; schedule(ed); }),
         h('span', { class: 'gen-label' }, t('Shapes')),
         chips<RoomShape>(ROOM_SHAPES, p.shapes, shapeName, (v) => { const n = toggleIn(p.shapes, v); if (n.length) { p.shapes = n; rerender(); } })),
+      sec(t('Layout'),
+        h('div', { class: 'seg gen-layouts' }, ...LAYOUTS.map((l: DungeonLayout) => h('button', { class: p.layout === l ? 'on' : '', 'aria-pressed': String(p.layout === l), onclick: () => setParam('layout', l, true) }, layoutName(l)))),
+        h('p', { class: 'hint' }, layoutDesc(p.layout))),
       sec(t('Corridors'),
         h('div', { class: 'gen-row' }, h('span', { class: 'gen-label' }, t('Width')),
           h('div', { class: 'seg' }, ...([[1, '1'], [2, '2'], [0, t('Mixed')]] as [0 | 1 | 2, string][]).map(([v, l]) => h('button', { class: p.corridorWidth === v ? 'on' : '', onclick: () => setParam('corridorWidth', v, true) }, l)))),
