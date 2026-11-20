@@ -9,7 +9,9 @@ export type Msg =
   | { t: 'view'; mapId: string; cx: number; cy: number; w: number; h: number }
   | { t: 'ping'; x: number; y: number }
   | { t: 'measure'; a: [number, number] | null; b: [number, number] | null }
-  | { t: 'bye' };
+  | { t: 'bye' }
+  | { t: 'dmhello' }
+  | { t: 'pbye' };
 
 export class Channel {
   private bc = new BroadcastChannel('cartografo-dnd-session');

@@ -57,6 +57,7 @@ export class Player {
       if (e.key === 'Escape') this.popup.hidden = true;
     });
     window.addEventListener('pointermove', () => { this.lastMove = performance.now(); this.gear.classList.add('show'); });
+    window.addEventListener('beforeunload', () => this.channel.send({ t: 'pbye' }));
     this.channel.send({ t: 'hello' });
     requestAnimationFrame(this.loop);
   }
@@ -108,6 +109,7 @@ export class Player {
       case 'ping': this.pings.push({ x: m.x, y: m.y, t: performance.now() }); break;
       case 'measure': this.measure = m.a && m.b ? { a: m.a, b: m.b } : null; this.needRender = true; break;
       case 'bye': this.rt = null; this.waiting.hidden = false; break;
+      case 'dmhello': this.channel.send({ t: 'hello' }); break;
     }
   }
 

@@ -7,7 +7,11 @@ import { History } from './history';
 import {
   CELL, Combat, DoorKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
 } from './model';
-import { buildPanel, buildToolbar } from './panels';
+import { buildTopbar, buildZoom, Intent, renderDock, renderRail, TOOL_INTENT, updateTopbar } from './ui/chrome';
+import { renderDrawer } from './ui/drawer';
+import { hideHome, showHome } from './ui/home';
+import { renderInitiative } from './ui/initiative';
+import { positionInspector, renderInspector } from './ui/inspector';
 import { allLights, drawLabel, drawMeasure, drawPing, labelFont, markerGeom, renderScene, stampSize, stampLayer, tokenRadius, View, visibleRect } from './render';
 import { MapRuntime } from './runtime';
 import { getMap, getMeta, listMaps, putMap, setMeta, StoredMap } from './storage';
@@ -43,27 +47,24 @@ export const SESSION_TOOLS: { id: Tool; name: string; key: string }[] = [
   { id: 'marker', name: 'Segnaposto', key: 'M' },
 ];
 
-export interface MapMeta { id: string; name: string; updatedAt: number; thumb?: string }
+export interface MapMeta { id: string; name: string; updatedAt: number; cols: number; rows: number; thumb?: string }
 
 export class Editor {
   root: HTMLElement;
   canvas!: HTMLCanvasElement;
   ctx!: CanvasRenderingContext2D;
-  toolbar!: HTMLElement;
-  side!: HTMLElement;
-  hud!: HTMLElement;
-  popup!: HTMLElement;
   stage!: HTMLElement;
-  titleEl!: HTMLElement;
-  undoBtn!: HTMLButtonElement;
-  redoBtn!: HTMLButtonElement;
-  modeSeg!: HTMLElement;
+  /** UI element references, filled by the ui/* builders. */
+  el: Record<string, HTMLElement> = {};
+  /** Transient UI state shared by the ui/* modules. */
+  ui = { stampCat: 'Arredi', search: '', drawerOpen: true, hpAmt: 5 };
+  lastTool: Partial<Record<Intent, Tool>> = {};
+  playerConnected = false;
   dpr = 1; vw = 1; vh = 1;
   view: View = { z: 0.5, x: 0, y: 0 };
   rt!: MapRuntime;
   mode: Mode = 'edit';
   tool: Tool = 'select';
-  tab: 'tool' | 'map' | 'combat' = 'tool';
   sel: Sel | null = null;
   hist = new History();
   maps: MapMeta[] = [];
@@ -113,44 +114,32 @@ export class Editor {
   async init() {
     this.buildLayout();
     await assets.loadAll();
-    assets.onChange = () => { this.refreshPanel(); this.requestRender(); };
+    assets.onChange = () => { this.refreshUI(); this.requestRender(); };
     await this.refreshMaps();
     const last = await getMeta<string>('lastMap');
     const target = this.maps.find((m) => m.id === last) || this.maps[0];
     if (target) await this.openMap(target.id);
-    else await this.createMap({ name: 'Il mio primo dungeon', cols: 32, rows: 24, template: 'dungeon' });
+    else await this.showHome();
     document.fonts?.ready.then(() => this.requestRender());
+    this.channel.send({ t: 'dmhello' });
     requestAnimationFrame(this.loop);
   }
 
   private buildLayout() {
+    const el = this.el;
     this.canvas = h('canvas', { id: 'cv' });
     this.ctx = this.canvas.getContext('2d')!;
-    this.hud = h('div', { class: 'hud' });
-    this.popup = h('div', { class: 'popup', hidden: true });
-    this.stage = h('main', { class: 'stage' }, this.canvas, this.hud, this.popup);
-    this.toolbar = h('nav', { class: 'toolbar' });
-    this.side = h('aside', { class: 'side' });
-    this.titleEl = h('button', { class: 'map-title', title: 'Le mie mappe', onclick: () => import('./dialogs').then((d) => d.mapsDialog(this)) });
-    this.undoBtn = h('button', { class: 'icon-btn', title: 'Annulla (Ctrl/Cmd+Z)', onclick: () => this.undo() }, icon('undo')) as HTMLButtonElement;
-    this.redoBtn = h('button', { class: 'icon-btn', title: 'Ripeti (Shift+Ctrl/Cmd+Z)', onclick: () => this.redo() }, icon('redo')) as HTMLButtonElement;
-    this.modeSeg = h('div', { class: 'seg mode-seg' },
-      h('button', { 'data-v': 'edit', onclick: () => this.setMode('edit') }, '✏️ Editor'),
-      h('button', { 'data-v': 'session', onclick: () => this.setMode('session') }, '🎲 Sessione'));
-    const top = h('header', { class: 'topbar' },
-      h('div', { class: 'brand' }, h('span', { class: 'brand-mark' }, '⚔'), 'Cartografo'),
-      this.titleEl,
-      h('button', { class: 'btn ghost', onclick: () => import('./dialogs').then((d) => d.newMapDialog(this)) }, '＋ Nuova mappa'),
-      h('div', { class: 'spacer' }),
-      this.undoBtn, this.redoBtn,
-      this.modeSeg,
-      h('button', { class: 'btn accent', onclick: () => this.openPlayer(), title: 'Apri la finestra da mostrare sulla TV' }, '📺 Vista giocatori'),
-      h('button', { class: 'btn ghost', onclick: (e: MouseEvent) => import('./dialogs').then((d) => d.fileMenu(this, e.currentTarget as HTMLElement)) }, 'File ▾'),
-      h('button', { class: 'icon-btn', title: 'Aiuto e scorciatoie', onclick: () => import('./dialogs').then((d) => d.helpDialog()) }, '?'),
-    );
-    this.root.append(top, h('div', { class: 'body' }, this.toolbar, this.stage, this.side));
-    this.hist.onChange = () => { this.undoBtn.disabled = !this.hist.canUndo; this.redoBtn.disabled = !this.hist.canRedo; };
-    this.hist.onChange();
+    el.rail = h('nav', { class: 'rail', 'aria-label': 'Strumenti' });
+    el.dock = h('div', { class: 'dock' });
+    el.drawer = h('section', { class: 'drawer', 'aria-label': 'Libreria oggetti', hidden: true });
+    el.inspector = h('div', { class: 'inspector', hidden: true });
+    el.initPanel = h('aside', { class: 'init-panel', 'aria-label': 'Iniziativa', hidden: true });
+    el.save = h('div', { class: 'save-status' });
+    el.home = h('div', { class: 'home', hidden: true });
+    this.stage = h('main', { class: 'stage' }, this.canvas, el.rail, el.initPanel, el.inspector, el.drawer, el.dock, buildZoom(this), el.save);
+    this.root.append(buildTopbar(this), this.stage, el.home);
+    this.hist.onChange = () => updateTopbar(this);
+    this.setSaveStatus('saved');
 
     new ResizeObserver(() => this.resize()).observe(this.stage);
     const c = this.canvas;
@@ -183,7 +172,7 @@ export class Editor {
   async refreshMaps() {
     const all = await listMaps();
     this.maps.forEach((m) => m.thumb && URL.revokeObjectURL(m.thumb));
-    this.maps = all.sort((a, b) => b.updatedAt - a.updatedAt).map((m) => ({ id: m.id, name: m.name, updatedAt: m.updatedAt, thumb: m.thumb ? URL.createObjectURL(m.thumb) : undefined }));
+    this.maps = all.sort((a, b) => b.updatedAt - a.updatedAt).map((m) => ({ id: m.id, name: m.name, updatedAt: m.updatedAt, cols: m.doc.cols, rows: m.doc.rows, thumb: m.thumb ? URL.createObjectURL(m.thumb) : undefined }));
   }
 
   async openMap(id: string) {
@@ -226,11 +215,12 @@ export class Editor {
     this.hist.clear();
     this.sel = null;
     this.changed('masks');
-    this.refreshPanel();
+    this.refreshUI();
   }
 
   setRuntime(rt: MapRuntime) {
     this.rt = rt;
+    this.hideHome();
     this.discarded = false;
     this.sel = null;
     this.draft = null;
@@ -238,14 +228,13 @@ export class Editor {
     this.hist.clear();
     this.fitView();
     this.updateTitle();
-    this.refreshToolbar();
-    this.refreshPanel();
+    this.refreshUI();
     this.updateHud();
     this.requestRender();
   }
 
   updateTitle() {
-    this.titleEl.textContent = '🗺  ' + (this.rt?.doc.name || '');
+    updateTopbar(this);
     document.title = (this.rt?.doc.name || 'Mappa') + ' · Cartografo';
   }
 
@@ -260,8 +249,11 @@ export class Editor {
   fitView() {
     if (!this.rt) return;
     const W = this.rt.W, H = this.rt.H;
-    const z = Math.min(this.vw / W, this.vh / H) * 0.92;
-    this.view = { z, x: (this.vw - W * z) / 2, y: (this.vh - H * z) / 2 };
+    const left = this.mode === 'edit' ? 100 : 330, bottom = 96, top = 12, right = 12;
+    const aw = Math.max(200, this.vw - left - right), ah = Math.max(200, this.vh - top - bottom);
+    const z = Math.min(aw / W, ah / H) * 0.96;
+    this.view = { z, x: left + (aw - W * z) / 2, y: top + (ah - H * z) / 2 };
+    this.updateHud();
     this.requestRender();
   }
 
@@ -281,6 +273,7 @@ export class Editor {
     if (!this.rt || this.discarded) return;
     this.saveSoon.cancel();
     if (this.saving) { this.saveAgain = true; return this.saving; }
+    this.setSaveStatus('saving');
     this.saving = (async () => {
       try {
         const thumb = await this.makeThumb();
@@ -288,9 +281,11 @@ export class Editor {
         await putMap(rec);
         const meta = this.maps.find((m) => m.id === rec.id);
         if (meta) { meta.name = rec.name; meta.updatedAt = rec.updatedAt; }
-        else this.maps.unshift({ id: rec.id, name: rec.name, updatedAt: rec.updatedAt });
+        else this.maps.unshift({ id: rec.id, name: rec.name, updatedAt: rec.updatedAt, cols: rec.doc.cols, rows: rec.doc.rows });
         if (this.mode === 'session' && this.masksDirtyForPlayers) { this.masksDirtyForPlayers = false; this.channel.send({ t: 'map', id: rec.id }); }
+        this.setSaveStatus('saved');
       } catch (e) {
+        this.setSaveStatus('error');
         console.error(e);
         toast('Errore durante il salvataggio');
       } finally {
@@ -331,7 +326,7 @@ export class Editor {
     for (const k of OBJECT_KEYS) d[k] = o[k];
     d.combat = o.combat;
     if (this.sel && !this.getSel()) this.sel = null;
-    this.refreshPanel();
+    this.refreshUI();
     this.changed('objects');
   }
   begin(): string { return this.snap(); }
@@ -388,8 +383,7 @@ export class Editor {
   }
   select(s: Sel | null) {
     this.sel = s;
-    this.popup.hidden = true;
-    this.refreshPanel();
+    this.refreshUI();
     this.requestRender();
   }
   deleteSel() {
@@ -464,7 +458,7 @@ export class Editor {
     const lx = ((x - s.x) * c - (y - s.y) * sn) / s.scale, ly = ((x - s.x) * sn + (y - s.y) * c) / s.scale;
     return Math.abs(lx) < w / 2 && Math.abs(ly) < h / 2;
   }
-  private stampHandles(s: Stamp) {
+  stampHandles(s: Stamp) {
     const { w, h } = stampSize(s);
     const c = Math.cos(s.rot), sn = Math.sin(s.rot), k = s.scale;
     const tr = (lx: number, ly: number): [number, number] => [s.x + (lx * c - ly * sn) * k, s.y + (lx * sn + ly * c) * k];
@@ -503,7 +497,7 @@ export class Editor {
 
   private onDown(e: PointerEvent) {
     this.canvas.setPointerCapture(e.pointerId);
-    this.popup.hidden = true;
+    import('./dom').then((d) => d.closePopover());
     const p = this.toWorld(e);
     const [x, y] = p;
     if (e.button === 1 || e.button === 2 || this.space) {
@@ -514,6 +508,7 @@ export class Editor {
     }
     if (e.button !== 0) return;
     const doc = this.rt.doc;
+    if (this.mode === 'session' && e.altKey && this.tool === 'select') { this.ping(x, y); return; }
     switch (this.tool) {
       case 'select': return this.downSelect(e, x, y);
       case 'terrain': {
@@ -582,7 +577,7 @@ export class Editor {
         const l: Label = { id, x, y, text: 'Testo', font: o.font, size: o.size, color: o.color, stroke: o.stroke, rot: 0, bold: o.bold };
         this.mutate('Testo', () => doc.labels.push(l));
         this.select({ kind: 'label', id });
-        setTimeout(() => { const ta = this.side.querySelector('textarea'); if (ta) { (ta as HTMLTextAreaElement).focus(); (ta as HTMLTextAreaElement).select(); } }, 30);
+        setTimeout(() => { const ta = this.el.inspector.querySelector('textarea'); if (ta) { (ta as HTMLTextAreaElement).focus(); (ta as HTMLTextAreaElement).select(); } }, 30);
         return;
       }
       case 'marker': {
@@ -590,7 +585,7 @@ export class Editor {
         const m: Marker = { id, x, y, icon: o.icon, color: o.color, title: 'Nuovo segnaposto', notes: '', playerNotes: '', visible: false };
         this.mutate('Segnaposto', () => doc.markers.push(m));
         this.select({ kind: 'marker', id });
-        setTimeout(() => { const i = this.side.querySelector('input[type=text]'); if (i) { (i as HTMLInputElement).focus(); (i as HTMLInputElement).select(); } }, 30);
+        setTimeout(() => { const i = this.el.inspector.querySelector('input[type=text]'); if (i) { (i as HTMLInputElement).focus(); (i as HTMLInputElement).select(); } }, 30);
         return;
       }
       case 'measure': {
@@ -624,7 +619,6 @@ export class Editor {
     if (session && hit.kind === 'door') { this.toggleDoor(hit.id); return; }
     this.select(hit);
     const o = this.getSel();
-    if (session && hit.kind === 'marker') this.showMarkerPopup(o, e);
     const orig = 'pts' in o ? { pts: [...o.pts] } : { x: o.x, y: o.y };
     this.drag = { kind: 'move', before: this.begin(), sx: x, sy: y, orig, moved: false, alt: e.altKey };
   }
@@ -730,7 +724,7 @@ export class Editor {
         }
         break;
       }
-      case 'scale': case 'rotate': this.commit('Trasforma', d.before); this.refreshPanel(); break;
+      case 'scale': case 'rotate': this.commit('Trasforma', d.before); this.refreshUI(); break;
       case 'move': {
         const o = this.getSel();
         if (o && d.moved) {
@@ -786,6 +780,7 @@ export class Editor {
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); this.redo(); return; }
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveNow().then(() => toast('Salvato')); return; }
     if (typing) { if (e.key === 'Escape') t.blur(); return; }
+    if (!this.el.home.hidden) { if (e.key === 'Escape' && this.rt) this.hideHome(); return; }
     if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); this.duplicateSel(); return; }
     if (e.code === 'Space') { if (!this.space) { this.space = true; this.updateCursor(); } e.preventDefault(); return; }
     if (e.key === 'Escape') { this.draft = null; this.rectDraft = null; this.measure = null; this.sendMeasure(); this.select(null); return; }
@@ -805,7 +800,7 @@ export class Editor {
     if (e.key === '0' && !mod) { this.fitView(); return; }
     if (e.key === 'q' || e.key === 'e') {
       const o = this.getSel();
-      if (o && this.sel && (this.sel.kind === 'stamp' || this.sel.kind === 'label')) { this.mutate('Ruota', () => { o.rot += (e.key === 'e' ? 1 : -1) * Math.PI / 12; }, 'rot:' + o.id); this.refreshPanel(); }
+      if (o && this.sel && (this.sel.kind === 'stamp' || this.sel.kind === 'label')) { this.mutate('Ruota', () => { o.rot += (e.key === 'e' ? 1 : -1) * Math.PI / 12; }, 'rot:' + o.id); this.refreshUI(); }
       return;
     }
     const list = this.mode === 'edit' ? EDIT_TOOLS : SESSION_TOOLS;
@@ -817,7 +812,7 @@ export class Editor {
     const o = this.tool === 'terrain' ? this.opts.terrain : this.tool === 'cave' ? this.opts.cave : this.tool === 'fog' ? this.opts.fog : null;
     if (!o) return;
     o.size = clamp(+(o.size * (dir > 0 ? 1.25 : 0.8)).toFixed(2), 0.25, 20);
-    this.refreshPanel();
+    this.refreshUI();
     this.requestRender();
   }
 
@@ -832,11 +827,10 @@ export class Editor {
   // ======================================================================== tools
   setTool(t: Tool) {
     this.tool = t;
+    if (this.mode === 'edit') this.lastTool[TOOL_INTENT[t]] = t;
     this.draft = null; this.rectDraft = null;
-    this.tab = this.tab === 'combat' && this.mode === 'session' ? 'combat' : 'tool';
     this.updateCursor();
-    this.refreshToolbar();
-    this.refreshPanel();
+    this.refreshUI();
     this.requestRender();
   }
 
@@ -950,7 +944,7 @@ export class Editor {
     const d = this.rt.doc.doors.find((x) => x.id === id);
     if (!d) return;
     this.mutate(d.open ? 'Chiudi porta' : 'Apri porta', () => { d.open = !d.open; });
-    if (this.sel?.id === id) this.refreshPanel();
+    if (this.sel?.id === id) this.refreshUI();
   }
 
   ping(x: number, y: number) {
@@ -968,12 +962,10 @@ export class Editor {
     if (m === this.mode) return;
     this.mode = m;
     this.tool = 'select';
-    this.tab = 'tool';
     this.sel = null;
     this.draft = null;
     this.root.classList.toggle('session', m === 'session');
-    this.refreshToolbar();
-    this.refreshPanel();
+    this.refreshUI();
     this.requestRender();
     if (m === 'session') {
       await this.saveNow();
@@ -998,6 +990,7 @@ export class Editor {
   }
 
   private async onMsg(m: Msg) {
+    if (m.t === 'pbye') { this.playerConnected = false; updateTopbar(this); return; }
     if (!this.rt) return;
     if (m.t === 'hello') {
       if (this.mode !== 'session') await this.setMode('session');
@@ -1008,25 +1001,10 @@ export class Editor {
       this.channel.send({ t: 'doc', doc: this.rt.doc });
       this.sendFogFull();
       this.sendView();
-      toast('📺 Vista giocatori collegata');
+      if (!this.playerConnected) toast('TV collegata');
+      this.playerConnected = true;
+      updateTopbar(this);
     }
-  }
-
-  showMarkerPopup(m: Marker, e: { clientX: number; clientY: number }) {
-    const r = this.stage.getBoundingClientRect();
-    this.popup.innerHTML = '';
-    const linked = m.link ? this.maps.find((x) => x.id === m.link) : null;
-    this.popup.append(
-      h('div', { class: 'popup-head' }, h('span', { class: 'popup-icon' }, m.icon), h('strong', null, m.title || 'Segnaposto'), h('button', { class: 'icon-btn', onclick: () => (this.popup.hidden = true) }, '✕')),
-      m.notes ? h('div', { class: 'popup-notes' }, m.notes) : h('div', { class: 'popup-notes muted' }, 'Nessuna nota.'),
-      m.playerNotes ? h('div', { class: 'popup-player' }, h('em', null, 'Per i giocatori: '), m.playerNotes) : '',
-      h('div', { class: 'row' },
-        h('button', { class: 'btn small', onclick: () => { this.mutate('Visibilità', () => { m.visible = !m.visible; }); this.showMarkerPopup(m, e); } }, m.visible ? '🙈 Nascondi ai giocatori' : '👁 Mostra ai giocatori'),
-        linked ? h('button', { class: 'btn small accent', onclick: () => this.openMap(linked.id) }, '➜ ' + linked.name) : null),
-    );
-    this.popup.style.left = Math.min(r.width - 300, e.clientX - r.left + 12) + 'px';
-    this.popup.style.top = Math.min(r.height - 200, e.clientY - r.top + 12) + 'px';
-    this.popup.hidden = false;
   }
 
   // ---- combat
@@ -1073,8 +1051,63 @@ export class Editor {
 
   // ======================================================================== rendering
   requestRender() { this.needRender = true; }
-  refreshToolbar() { buildToolbar(this); this.modeSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.v === this.mode)); }
-  refreshPanel() { if (this.rt) buildPanel(this); }
+  refreshUI() {
+    if (!this.rt) return;
+    this.root.classList.toggle('session', this.mode === 'session');
+    updateTopbar(this);
+    renderRail(this);
+    renderDock(this);
+    renderDrawer(this);
+    renderInitiative(this);
+    renderInspector(this);
+    positionInspector(this);
+    this.updateHud();
+  }
+  refreshDockHint() {
+    const hint = this.el.dock.querySelector('.dock-hint');
+    if (hint) hint.textContent = this.dockHint();
+  }
+  dockHint(): string {
+    if (this.mode === 'session') {
+      if (this.tool === 'fog') return this.opts.fog.mode === 'room' ? 'Clicca dentro una stanza per rivelarla tutta' : this.opts.fog.mode === 'reveal' ? 'Dipingi per rivelare la mappa ai giocatori' : 'Dipingi per coprire di nuovo';
+      if (this.tool === 'ping') return 'Clicca per attirare lo sguardo dei giocatori';
+      if (this.tool === 'measure') return 'Trascina da una casella all\'altra (anche i giocatori lo vedono)';
+      if (this.tool === 'token') return 'Clicca per piazzare la pedina · i mostri nuovi sono nascosti ai giocatori';
+      return 'Trascina le pedine · clic su una porta per aprirla · Alt + clic per un ping';
+    }
+    switch (this.tool) {
+      case 'select': return this.sel ? '' : 'Clicca un oggetto per modificarlo · trascina il vuoto per muovere la vista';
+      case 'terrain': return this.opts.terrain.erase ? 'Trascina per cancellare la texture scelta' : 'Trascina per dipingere · [ ] cambiano la dimensione';
+      case 'room': return this.opts.room.zone ? 'Disegna una zona invisibile da rivelare con un clic durante il gioco' : this.opts.room.shape === 'rect' ? 'Trascina sulla griglia per creare una stanza — i muri si disegnano da soli' : 'Clicca i vertici · doppio clic o Invio per chiudere';
+      case 'cave': return this.opts.cave.erase ? 'Trascina per riempire di roccia' : 'Trascina per scavare gallerie con pareti naturali';
+      case 'wall': return 'Clicca per aggiungere punti · doppio clic o Invio per finire · Alt per punti liberi';
+      case 'door': return 'Clicca su un bordo della griglia · clic su una porta esistente per aprirla';
+      case 'text': return 'Clicca sulla mappa per scrivere';
+      case 'marker': return 'Clicca per piazzare un segnaposto con note segrete';
+      case 'token': return 'Clicca per piazzare una pedina';
+      case 'measure': return 'Trascina da una casella all\'altra';
+      default: return '';
+    }
+  }
+  ensureFog() {
+    if (this.rt.doc.fogEnabled) return;
+    this.mutate('Nebbia', () => { this.rt.doc.fogEnabled = true; });
+    toast('Nebbia di guerra attivata');
+  }
+  zoomCenter(k: number) {
+    const r = this.canvas.getBoundingClientRect();
+    this.zoomAt(r.left + this.vw / 2, r.top + this.vh / 2, k);
+    this.bcastView(); this.updateHud(); this.requestRender();
+  }
+  setSaveStatus(st: 'saving' | 'saved' | 'error') {
+    const e = this.el.save;
+    if (!e) return;
+    e.className = 'save-status ' + st;
+    e.innerHTML = '';
+    e.append(icon(st === 'error' ? 'x' : 'check', 14), st === 'saving' ? 'Salvataggio…' : st === 'saved' ? 'Salvato' : 'Errore di salvataggio');
+  }
+  async showHome() { await showHome(this); }
+  hideHome() { hideHome(this); }
 
   private loop = (t: number) => {
     requestAnimationFrame(this.loop);
@@ -1091,6 +1124,7 @@ export class Editor {
     if (!this.needRender) return;
     this.needRender = false;
     this.draw(t);
+    positionInspector(this);
   };
 
   private draw(time: number) {
@@ -1248,14 +1282,7 @@ export class Editor {
   }
 
   updateHud() {
-    const p = this.pointer;
-    const z = Math.round(this.view.z * 100);
-    let s = `${z}%`;
-    if (p && this.rt) {
-      const cx = Math.floor(p[0] / CELL) + 1, cy = Math.floor(p[1] / CELL) + 1;
-      if (cx >= 1 && cy >= 1 && cx <= this.rt.doc.cols && cy <= this.rt.doc.rows) s += `  ·  casella ${cx}, ${cy}`;
-    }
-    this.hud.textContent = s;
+    if (this.el.zoomVal) this.el.zoomVal.textContent = Math.round(this.view.z * 100) + '%';
   }
 
   // ======================================================================== misc
