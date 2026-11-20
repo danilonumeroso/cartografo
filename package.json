@@ -1,0 +1,22 @@
+{
+  "name": "cartografo-dnd",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "description": "Editor di battle map per D&D in stile dipinto, con vista giocatori per la TV, nebbia di guerra e iniziativa.",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danilonumeroso/cartografo"
+  }
+}
