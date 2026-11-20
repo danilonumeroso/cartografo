@@ -1,47 +1,52 @@
-# Cartografo — mappe per D&D
+# Cartografo — D&D battle maps
 
-Editor di battle map in stile "dipinto" che gira nel browser, con una vista giocatori da mandare sulla TV.
+Painted-style D&D battle map editor that runs in the browser, with a player view for your TV, fog of war and initiative tracking.
 
-## Avvio
+> The app's interface is currently in Italian.
+
+## Getting started
 
 ```bash
 npm install
-npm run dev        # poi apri http://localhost:5173
+npm run dev        # then open http://localhost:5173
 ```
 
-Per una versione statica (da mettere su qualunque hosting o aprire con `npm run preview`):
+For a static build (deployable to any static host, or served locally with `npm run preview`):
 
 ```bash
 npm run build      # output in dist/
 ```
 
-## Cosa c'è
+## Features
 
-- **Editor**: pennelli di terreno (erba, terra, lastricato, legno, acqua, lava…), stanze con muri automatici,
-  caverne a pennello, muri liberi, porte (anche segrete), ~60 oggetti visti dall'alto, PNG importati, luci, testi, segnaposti con note.
-- **Generatori**: dungeon, caverna, radura nel bosco, taverna.
-- **Sessione**: finestra giocatori sincronizzata (nebbia di guerra, porte, pedine, ping, righello, iniziativa),
-  calibrazione a 1 casella = 1 pollice per le miniature sulla TV sdraiata, rotazione dello schermo.
-- **Combattimento**: iniziativa, PF, CA, condizioni 5e; ai giocatori i mostri mostrano solo lo stato (Ferito, Sanguinante…).
-- **Salvataggio** automatico nel browser (IndexedDB), export PNG, export/import `.json` e backup.
+- **Prepare mode**: five intents — Select, Paint, Build, Furnish, Annotate — with a contextual dock that only shows the active tool's options.
+  - Terrain brushes (grass, dirt, flagstone, wood, water, lava…) with natural, irregular edges.
+  - Rooms with automatic walls, brush-dug caves, free-standing walls, doors (including secret ones).
+  - ~60 hand-drawn top-down props, imported PNG assets, light sources, labels and markers with private notes.
+- **Generators**: dungeon, cave, forest clearing, tavern.
+- **Play mode**: synchronized player window (fog of war, doors, tokens, pings, ruler, initiative), with real-scale calibration
+  (1 square = 1 inch) for miniatures on a table-mounted TV, plus screen rotation.
+- **Combat**: initiative order, HP, AC and 5e conditions. Players only see names and conditions; health stays DM-only.
+- **Storage**: autosave in the browser (IndexedDB), PNG export, `.json` export/import and full backups.
 
-## Struttura
+## Project structure
 
-| File | Ruolo |
+| Path | Purpose |
 | --- | --- |
-| `src/engine.ts` | composizione del terreno: maschere, bordi irregolari, muri e ombre generati da stanze e caverne |
-| `src/textures.ts` | texture procedurali ripetibili (4 caselle per tile) |
-| `src/stamps.ts` | oggetti disegnati via codice |
-| `src/render.ts` | rendering della scena (editor, giocatori, export) |
-| `src/editor.ts` · `src/panels.ts` · `src/dialogs.ts` | interfaccia del DM |
-| `src/player.ts` | vista giocatori |
-| `src/generate.ts` | generatori casuali |
+| `src/engine.ts` | terrain compositing: paint masks, rough edges, walls and shadows generated from rooms and caves |
+| `src/textures.ts` | procedural tileable textures (4 grid squares per tile) |
+| `src/stamps.ts` | props drawn in code |
+| `src/render.ts` | scene rendering (editor, player view, export) |
+| `src/editor.ts` | DM editor: input, tools, history, saving, session sync |
+| `src/ui/` | DM interface: top bar, intent rail and dock, object library, inspector, initiative panel, home screen, menus |
+| `src/player.ts` | player view |
+| `src/generate.ts` | random map generators |
 
-## Licenza
+## License
 
 Copyright (C) 2026 Danilo Numeroso
 
-Cartografo è software libero: puoi ridistribuirlo e/o modificarlo secondo i termini della
-[GNU General Public License](LICENSE) pubblicata dalla Free Software Foundation, versione 3
-o (a tua scelta) qualsiasi versione successiva. Chi distribuisce versioni modificate deve
-rilasciarle con la stessa licenza.
+Cartografo is free software: you can redistribute it and/or modify it under the terms of the
+[GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3
+of the License, or (at your option) any later version. Modified versions you distribute must be
+released under the same license.
