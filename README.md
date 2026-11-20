@@ -2,7 +2,7 @@
 
 Painted-style D&D battle map editor that runs in the browser, with a player view for your TV, fog of war and initiative tracking.
 
-> The app's interface is currently in Italian.
+> The interface is available in English (default) and Italian — switch language from the ⋯ menu.
 
 ## Getting started
 

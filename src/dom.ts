@@ -1,3 +1,4 @@
+import { t } from './i18n';
 export type Child = Node | string | number | null | undefined | false | Child[];
 
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, any> | null = null, ...kids: Child[]): HTMLElementTagNameMap[K] {
@@ -85,7 +86,7 @@ export function modal(title: string, body: Child, actions: { label: string; cls?
   const back = h('div', { class: 'modal-back' });
   const close = () => back.remove();
   const box = h('div', { class: 'modal' + (wide ? ' wide' : '') },
-    h('header', null, h('h2', null, title), h('button', { class: 'icon-btn', onclick: close, title: 'Chiudi' }, '✕')),
+    h('header', null, h('h2', null, title), h('button', { class: 'icon-btn', onclick: close, title: t('Close') }, '✕')),
     h('div', { class: 'modal-body' }, body),
     actions.length ? h('footer', null, ...actions.map((a) => h('button', { class: 'btn ' + (a.cls || ''), onclick: async () => { const r = await a.onClick?.(); if (r !== false) close(); } }, a.label))) : null,
   );
@@ -164,6 +165,7 @@ export const ICONS: Record<string, string> = {
   map: I('<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>'),
   help: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 3.5M12 17h.01"/>'),
   swords: I('<path d="M5 19L19 5M14 5h5v5M5 5l14 14M5 14v5h5"/>'),
+  globe: I('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>'),
   expand: I('<path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>'),
 };
 export function icon(name: string, size = 20) {

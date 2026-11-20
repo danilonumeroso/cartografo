@@ -1,4 +1,5 @@
 import { uid } from './util';
+import { t } from './i18n';
 
 /** World pixels per grid square (5 ft). */
 export const CELL = 100;
@@ -54,7 +55,7 @@ export function newDoc(name: string, cols: number, rows: number, bg = 'rock'): M
 
 /** Fill in fields added in later versions. */
 export function migrateDoc(d: any): MapDoc {
-  const base = newDoc(d.name || 'Mappa', d.cols || 30, d.rows || 20);
+  const base = newDoc(d.name || t('Map'), d.cols || 30, d.rows || 20);
   const out = { ...base, ...d } as MapDoc;
   for (const k of OBJECT_KEYS) if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   out.grid = { ...base.grid, ...(d.grid || {}) };
@@ -63,45 +64,45 @@ export function migrateDoc(d: any): MapDoc {
 }
 
 export const TOKEN_CELLS: Record<TokenSize, number> = { tiny: 0.5, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 };
-export const TOKEN_SIZE_NAMES: Record<TokenSize, string> = { tiny: 'Minuscola', small: 'Piccola', medium: 'Media', large: 'Grande', huge: 'Enorme', gargantuan: 'Mastodontica' };
-export const TOKEN_KIND_NAMES: Record<TokenKind, string> = { pc: 'Personaggio', ally: 'Alleato', npc: 'PNG', monster: 'Mostro' };
+export const TOKEN_SIZE_NAMES: Record<TokenSize, string> = { tiny: t('Tiny'), small: t('Small'), medium: t('Medium'), large: t('Large'), huge: t('Huge'), gargantuan: t('Gargantuan') };
+export const TOKEN_KIND_NAMES: Record<TokenKind, string> = { pc: t('Player character'), ally: t('Ally'), npc: t('NPC'), monster: t('Monster') };
 export const TOKEN_KIND_COLORS: Record<TokenKind, string> = { pc: '#3b82f6', ally: '#22c55e', npc: '#eab308', monster: '#ef4444' };
 
 export const CONDITIONS: { id: string; name: string; icon: string }[] = [
-  { id: 'blinded', name: 'Accecato', icon: '🙈' },
-  { id: 'charmed', name: 'Affascinato', icon: '💘' },
-  { id: 'deafened', name: 'Assordato', icon: '🙉' },
-  { id: 'frightened', name: 'Spaventato', icon: '😱' },
-  { id: 'grappled', name: 'Afferrato', icon: '✊' },
-  { id: 'incapacitated', name: 'Incapacitato', icon: '💫' },
-  { id: 'invisible', name: 'Invisibile', icon: '👻' },
-  { id: 'paralyzed', name: 'Paralizzato', icon: '⚡' },
-  { id: 'petrified', name: 'Pietrificato', icon: '🗿' },
-  { id: 'poisoned', name: 'Avvelenato', icon: '🤢' },
-  { id: 'prone', name: 'Prono', icon: '⬇️' },
-  { id: 'restrained', name: 'Trattenuto', icon: '⛓️' },
-  { id: 'stunned', name: 'Stordito', icon: '😵' },
-  { id: 'unconscious', name: 'Privo di sensi', icon: '💤' },
-  { id: 'exhaustion', name: 'Esausto', icon: '😩' },
-  { id: 'concentration', name: 'Concentrazione', icon: '🎯' },
+  { id: 'blinded', name: t('Blinded'), icon: '🙈' },
+  { id: 'charmed', name: t('Charmed'), icon: '💘' },
+  { id: 'deafened', name: t('Deafened'), icon: '🙉' },
+  { id: 'frightened', name: t('Frightened'), icon: '😱' },
+  { id: 'grappled', name: t('Grappled'), icon: '✊' },
+  { id: 'incapacitated', name: t('Incapacitated'), icon: '💫' },
+  { id: 'invisible', name: t('Invisible'), icon: '👻' },
+  { id: 'paralyzed', name: t('Paralyzed'), icon: '⚡' },
+  { id: 'petrified', name: t('Petrified'), icon: '🗿' },
+  { id: 'poisoned', name: t('Poisoned'), icon: '🤢' },
+  { id: 'prone', name: t('Prone'), icon: '⬇️' },
+  { id: 'restrained', name: t('Restrained'), icon: '⛓️' },
+  { id: 'stunned', name: t('Stunned'), icon: '😵' },
+  { id: 'unconscious', name: t('Unconscious'), icon: '💤' },
+  { id: 'exhaustion', name: t('Exhaustion'), icon: '😩' },
+  { id: 'concentration', name: t('Concentration'), icon: '🎯' },
 ];
 
 export const FONTS = ['IM Fell English', 'Cinzel', 'MedievalSharp', 'Uncial Antiqua', 'Pirata One', 'Almendra'];
 export const MARKER_ICONS = ['📍', '⚔️', '💀', '💰', '🗝️', '🚪', '⚠️', '❓', '⭐', '🔥', '🐉', '🧙', '👁️', '📜', '🪤', '⛺'];
 
-export function newToken(x: number, y: number, kind: TokenKind = 'monster', name = 'Mostro'): Token {
+export function newToken(x: number, y: number, kind: TokenKind = 'monster', name = t('Monster')): Token {
   return {
     id: uid(), name, x, y, size: 'medium', kind, color: TOKEN_KIND_COLORS[kind],
     hp: 10, maxHp: 10, ac: 12, initMod: 0, init: null, conditions: [], hidden: kind === 'monster',
   };
 }
 
-export function hpStatus(t: Token): string {
-  if (t.maxHp <= 0) return '';
-  const r = t.hp / t.maxHp;
-  if (t.hp <= 0) return 'A terra';
-  if (r >= 1) return 'Illeso';
-  if (r > 0.5) return 'Ferito';
-  if (r > 0.25) return 'Sanguinante';
-  return 'Morente';
+export function hpStatus(tok: Token): string {
+  if (tok.maxHp <= 0) return '';
+  const r = tok.hp / tok.maxHp;
+  if (tok.hp <= 0) return t('Down');
+  if (r >= 1) return t('Unharmed');
+  if (r > 0.5) return t('Wounded');
+  if (r > 0.25) return t('Bloodied');
+  return t('Dying');
 }

@@ -17,6 +17,7 @@ import { MapRuntime } from './runtime';
 import { getMap, getMeta, listMaps, putMap, setMeta, StoredMap } from './storage';
 import { STAMP_BY_ID, VARIANTS } from './stamps';
 import { canvasToBlob, clamp, clipRect, ctx2d, debounce, distToSeg, expandRect, makeCanvas, nextFrame, pointInPoly, ptsBBox, Rect, unionRect, uid } from './util';
+import { t } from './i18n';
 
 export type Mode = 'edit' | 'session';
 export type Tool = 'select' | 'terrain' | 'room' | 'cave' | 'wall' | 'door' | 'stamp' | 'light' | 'token' | 'text' | 'marker' | 'measure' | 'fog' | 'ping';
@@ -25,26 +26,26 @@ export interface Sel { kind: SelKind; id: string }
 export const SEL_KEY: Record<SelKind, keyof MapDoc> = { stamp: 'stamps', room: 'rooms', wall: 'walls', door: 'doors', light: 'lights', label: 'labels', marker: 'markers', token: 'tokens' };
 
 export const EDIT_TOOLS: { id: Tool; name: string; key: string }[] = [
-  { id: 'select', name: 'Seleziona / sposta', key: 'V' },
-  { id: 'terrain', name: 'Pennello terreno', key: 'B' },
-  { id: 'room', name: 'Stanza', key: 'R' },
-  { id: 'cave', name: 'Caverna', key: 'C' },
-  { id: 'wall', name: 'Muro', key: 'W' },
-  { id: 'door', name: 'Porta', key: 'D' },
-  { id: 'stamp', name: 'Oggetti', key: 'O' },
-  { id: 'light', name: 'Luce', key: 'L' },
-  { id: 'token', name: 'Pedina', key: 'K' },
-  { id: 'text', name: 'Testo', key: 'T' },
-  { id: 'marker', name: 'Segnaposto con note', key: 'M' },
-  { id: 'measure', name: 'Righello', key: 'U' },
+  { id: 'select', name: t('Select / move'), key: 'V' },
+  { id: 'terrain', name: t('Terrain brush'), key: 'B' },
+  { id: 'room', name: t('Room'), key: 'R' },
+  { id: 'cave', name: t('Cave'), key: 'C' },
+  { id: 'wall', name: t('Wall'), key: 'W' },
+  { id: 'door', name: t('Door'), key: 'D' },
+  { id: 'stamp', name: t('Props'), key: 'O' },
+  { id: 'light', name: t('Light'), key: 'L' },
+  { id: 'token', name: t('Token'), key: 'K' },
+  { id: 'text', name: t('Text'), key: 'T' },
+  { id: 'marker', name: t('Marker with notes'), key: 'M' },
+  { id: 'measure', name: t('Ruler'), key: 'U' },
 ];
 export const SESSION_TOOLS: { id: Tool; name: string; key: string }[] = [
-  { id: 'select', name: 'Interagisci (sposta pedine, apri porte)', key: 'V' },
-  { id: 'fog', name: 'Nebbia di guerra', key: 'F' },
-  { id: 'ping', name: 'Ping per i giocatori', key: 'G' },
-  { id: 'measure', name: 'Righello', key: 'U' },
-  { id: 'token', name: 'Pedina', key: 'K' },
-  { id: 'marker', name: 'Segnaposto', key: 'M' },
+  { id: 'select', name: t('Interact (move tokens, open doors)'), key: 'V' },
+  { id: 'fog', name: t('Fog of war'), key: 'F' },
+  { id: 'ping', name: t('Ping for players'), key: 'G' },
+  { id: 'measure', name: t('Ruler'), key: 'U' },
+  { id: 'token', name: t('Token'), key: 'K' },
+  { id: 'marker', name: t('Marker'), key: 'M' },
 ];
 
 export interface MapMeta { id: string; name: string; updatedAt: number; cols: number; rows: number; thumb?: string }
@@ -57,7 +58,7 @@ export class Editor {
   /** UI element references, filled by the ui/* builders. */
   el: Record<string, HTMLElement> = {};
   /** Transient UI state shared by the ui/* modules. */
-  ui = { stampCat: 'Arredi', search: '', drawerOpen: true, hpAmt: 5 };
+  ui = { stampCat: 'furniture', search: '', drawerOpen: true, hpAmt: 5 };
   lastTool: Partial<Record<Intent, Tool>> = {};
   playerConnected = false;
   dpr = 1; vw = 1; vh = 1;
@@ -129,11 +130,11 @@ export class Editor {
     const el = this.el;
     this.canvas = h('canvas', { id: 'cv' });
     this.ctx = this.canvas.getContext('2d')!;
-    el.rail = h('nav', { class: 'rail', 'aria-label': 'Strumenti' });
+    el.rail = h('nav', { class: 'rail', 'aria-label': t('Tools') });
     el.dock = h('div', { class: 'dock' });
-    el.drawer = h('section', { class: 'drawer', 'aria-label': 'Libreria oggetti', hidden: true });
+    el.drawer = h('section', { class: 'drawer', 'aria-label': t('Prop library'), hidden: true });
     el.inspector = h('div', { class: 'inspector', hidden: true });
-    el.initPanel = h('aside', { class: 'init-panel', 'aria-label': 'Iniziativa', hidden: true });
+    el.initPanel = h('aside', { class: 'init-panel', 'aria-label': t('Initiative'), hidden: true });
     el.save = h('div', { class: 'save-status' });
     el.home = h('div', { class: 'home', hidden: true });
     this.stage = h('main', { class: 'stage' }, this.canvas, el.rail, el.initPanel, el.inspector, el.drawer, el.dock, buildZoom(this), el.save);
@@ -178,8 +179,8 @@ export class Editor {
   async openMap(id: string) {
     if (this.rt) await this.saveNow();
     const rec = await getMap(id);
-    if (!rec) { toast('Mappa non trovata'); return; }
-    this.showBusy('Carico la mappa…');
+    if (!rec) { toast(t('Map not found')); return; }
+    this.showBusy(t('Loading map…'));
     await nextFrame();
     const rt = await MapRuntime.load(rec);
     rt.engine.flush();
@@ -195,7 +196,7 @@ export class Editor {
     const doc = newDoc(o.name, o.cols, o.rows, bg);
     const rt = new MapRuntime(doc);
     if (['dungeon', 'cave', 'forest', 'tavern'].includes(o.template)) generate(rt, o.template as GenKind);
-    this.showBusy('Dipingo la mappa…');
+    this.showBusy(t('Painting the map…'));
     await nextFrame();
     rt.engine.flush();
     this.hideBusy();
@@ -207,7 +208,7 @@ export class Editor {
 
   async regenerate(kind: GenKind) {
     const rt = this.rt;
-    this.showBusy('Genero…');
+    this.showBusy(t('Generating…'));
     await nextFrame();
     generate(rt, kind);
     rt.engine.flush();
@@ -235,7 +236,7 @@ export class Editor {
 
   updateTitle() {
     updateTopbar(this);
-    document.title = (this.rt?.doc.name || 'Mappa') + ' · Cartografo';
+    document.title = (this.rt?.doc.name || t('Map')) + ' · Cartografo';
   }
 
   private busyEl: HTMLElement | null = null;
@@ -279,15 +280,18 @@ export class Editor {
         const thumb = await this.makeThumb();
         const rec = await this.rt.toStored(thumb);
         await putMap(rec);
-        const meta = this.maps.find((m) => m.id === rec.id);
-        if (meta) { meta.name = rec.name; meta.updatedAt = rec.updatedAt; }
-        else this.maps.unshift({ id: rec.id, name: rec.name, updatedAt: rec.updatedAt, cols: rec.doc.cols, rows: rec.doc.rows });
+        let meta = this.maps.find((m) => m.id === rec.id);
+        if (!meta) { meta = { id: rec.id, name: rec.name, updatedAt: rec.updatedAt, cols: rec.doc.cols, rows: rec.doc.rows }; this.maps.unshift(meta); }
+        meta.name = rec.name; meta.updatedAt = rec.updatedAt; meta.cols = rec.doc.cols; meta.rows = rec.doc.rows;
+        if (meta.thumb) URL.revokeObjectURL(meta.thumb);
+        meta.thumb = URL.createObjectURL(thumb);
+        updateTopbar(this);
         if (this.mode === 'session' && this.masksDirtyForPlayers) { this.masksDirtyForPlayers = false; this.channel.send({ t: 'map', id: rec.id }); }
         this.setSaveStatus('saved');
       } catch (e) {
         this.setSaveStatus('error');
         console.error(e);
-        toast('Errore durante il salvataggio');
+        toast(t('Error while saving'));
       } finally {
         this.saving = null;
         if (this.saveAgain) { this.saveAgain = false; this.saveSoon(); }
@@ -389,7 +393,7 @@ export class Editor {
   deleteSel() {
     if (!this.sel) return;
     const s = this.sel;
-    this.mutate('Elimina', () => {
+    this.mutate(t('Delete'), () => {
       const k = SEL_KEY[s.kind] as keyof MapDoc;
       (this.rt.doc as any)[k] = (this.rt.doc[k] as any[]).filter((o) => o.id !== s.id);
       if (s.kind === 'token') this.removeFromCombat(s.id);
@@ -404,7 +408,7 @@ export class Editor {
     c.id = uid();
     if ('pts' in c) c.pts = c.pts.map((v: number) => v + CELL);
     else { c.x += CELL; c.y += CELL; }
-    this.mutate('Duplica', () => { (this.rt.doc[SEL_KEY[kind]] as any[]).push(c); });
+    this.mutate(t('Duplicate'), () => { (this.rt.doc[SEL_KEY[kind]] as any[]).push(c); });
     this.select({ kind, id: c.id });
   }
   removeFromCombat(id: string) {
@@ -544,7 +548,7 @@ export class Editor {
         if (hit?.kind === 'door') { this.toggleDoor(hit.id); return; }
         const o = this.opts.door, sp = this.snapDoor(x, y, o.width);
         const id = uid();
-        this.mutate('Porta', () => doc.doors.push({ id, x: sp.x, y: sp.y, rot: sp.rot, kind: o.kind, open: false, width: o.width }));
+        this.mutate(t('Door'), () => doc.doors.push({ id, x: sp.x, y: sp.y, rot: sp.rot, kind: o.kind, open: false, width: o.width }));
         this.select({ kind: 'door', id });
         return;
       }
@@ -556,34 +560,34 @@ export class Editor {
       }
       case 'light': {
         const o = this.opts.light, id = uid();
-        this.mutate('Luce', () => doc.lights.push({ id, x, y, radius: o.radius, color: o.color, intensity: o.intensity, flicker: o.flicker }));
+        this.mutate(t('Light'), () => doc.lights.push({ id, x, y, radius: o.radius, color: o.color, intensity: o.intensity, flicker: o.flicker }));
         this.select({ kind: 'light', id });
         return;
       }
       case 'token': {
         const o = this.opts.token;
-        const n = doc.tokens.filter((t) => t.name.startsWith(o.name)).length;
-        const t = newToken(x, y, o.kind, n ? `${o.name} ${n + 1}` : o.name);
-        t.size = o.size;
-        if (o.image) t.image = o.image;
-        if (this.mode === 'session' && o.kind === 'monster') t.hidden = true;
-        this.snapToken(t);
-        this.mutate('Pedina', () => { doc.tokens.push(t); if (doc.combat.active) doc.combat.members.push(t.id); });
-        this.select({ kind: 'token', id: t.id });
+        const n = doc.tokens.filter((tok) => tok.name.startsWith(o.name)).length;
+        const tok = newToken(x, y, o.kind, n ? `${o.name} ${n + 1}` : o.name);
+        tok.size = o.size;
+        if (o.image) tok.image = o.image;
+        if (this.mode === 'session' && o.kind === 'monster') tok.hidden = true;
+        this.snapToken(tok);
+        this.mutate(t('Token'), () => { doc.tokens.push(tok); if (doc.combat.active) doc.combat.members.push(tok.id); });
+        this.select({ kind: 'token', id: tok.id });
         return;
       }
       case 'text': {
         const o = this.opts.text, id = uid();
-        const l: Label = { id, x, y, text: 'Testo', font: o.font, size: o.size, color: o.color, stroke: o.stroke, rot: 0, bold: o.bold };
-        this.mutate('Testo', () => doc.labels.push(l));
+        const l: Label = { id, x, y, text: t('Text'), font: o.font, size: o.size, color: o.color, stroke: o.stroke, rot: 0, bold: o.bold };
+        this.mutate(t('Text'), () => doc.labels.push(l));
         this.select({ kind: 'label', id });
         setTimeout(() => { const ta = this.el.inspector.querySelector('textarea'); if (ta) { (ta as HTMLTextAreaElement).focus(); (ta as HTMLTextAreaElement).select(); } }, 30);
         return;
       }
       case 'marker': {
         const o = this.opts.marker, id = uid();
-        const m: Marker = { id, x, y, icon: o.icon, color: o.color, title: 'Nuovo segnaposto', notes: '', playerNotes: '', visible: false };
-        this.mutate('Segnaposto', () => doc.markers.push(m));
+        const m: Marker = { id, x, y, icon: o.icon, color: o.color, title: t('New marker'), notes: '', playerNotes: '', visible: false };
+        this.mutate(t('Marker'), () => doc.markers.push(m));
         this.select({ kind: 'marker', id });
         setTimeout(() => { const i = this.el.inspector.querySelector('input[type=text]'); if (i) { (i as HTMLInputElement).focus(); (i as HTMLInputElement).select(); } }, 30);
         return;
@@ -711,10 +715,10 @@ export class Editor {
     if (!d) return;
     switch (d.kind) {
       case 'brush':
-        if (this.tool === 'terrain') this.commitMask('Pennello');
-        else if (this.tool === 'cave') this.commitMask('Caverna');
+        if (this.tool === 'terrain') this.commitMask(t('Brush'));
+        else if (this.tool === 'cave') this.commitMask(t('Cave'));
         break;
-      case 'scatter': this.commit('Oggetti', d.before); break;
+      case 'scatter': this.commit(t('Props'), d.before); break;
       case 'rect': {
         const [x0, y0, x1, y1] = this.rectDraft!;
         this.rectDraft = null;
@@ -724,13 +728,13 @@ export class Editor {
         }
         break;
       }
-      case 'scale': case 'rotate': this.commit('Trasforma', d.before); this.refreshUI(); break;
+      case 'scale': case 'rotate': this.commit(t('Transform'), d.before); this.refreshUI(); break;
       case 'move': {
         const o = this.getSel();
         if (o && d.moved) {
           if (this.sel!.kind === 'token') this.snapToken(o);
           if (this.sel!.kind === 'door' && !d.alt) Object.assign(o, this.snapDoor(o.x, o.y, o.width));
-          this.commit('Sposta', d.before);
+          this.commit(t('Move'), d.before);
         }
         break;
       }
@@ -773,13 +777,13 @@ export class Editor {
   }
 
   private onKey(e: KeyboardEvent) {
-    const t = e.target as HTMLElement;
-    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    const tok = e.target as HTMLElement;
+    const typing = tok && (tok.tagName === 'INPUT' || tok.tagName === 'TEXTAREA' || tok.tagName === 'SELECT' || tok.isContentEditable);
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); return; }
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); this.redo(); return; }
-    if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveNow().then(() => toast('Salvato')); return; }
-    if (typing) { if (e.key === 'Escape') t.blur(); return; }
+    if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveNow().then(() => toast(t('Saved'))); return; }
+    if (typing) { if (e.key === 'Escape') tok.blur(); return; }
     if (!this.el.home.hidden) { if (e.key === 'Escape' && this.rt) this.hideHome(); return; }
     if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); this.duplicateSel(); return; }
     if (e.code === 'Space') { if (!this.space) { this.space = true; this.updateCursor(); } e.preventDefault(); return; }
@@ -793,14 +797,14 @@ export class Editor {
         e.preventDefault();
         const st = this.sel.kind === 'token' || e.shiftKey ? CELL : CELL / 10;
         const dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0, dy = e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0;
-        this.mutate('Sposta', () => { o.x += dx; o.y += dy; }, 'nudge:' + o.id);
+        this.mutate(t('Move'), () => { o.x += dx; o.y += dy; }, 'nudge:' + o.id);
       }
       return;
     }
     if (e.key === '0' && !mod) { this.fitView(); return; }
     if (e.key === 'q' || e.key === 'e') {
       const o = this.getSel();
-      if (o && this.sel && (this.sel.kind === 'stamp' || this.sel.kind === 'label')) { this.mutate('Ruota', () => { o.rot += (e.key === 'e' ? 1 : -1) * Math.PI / 12; }, 'rot:' + o.id); this.refreshUI(); }
+      if (o && this.sel && (this.sel.kind === 'stamp' || this.sel.kind === 'label')) { this.mutate(t('Rotate'), () => { o.rot += (e.key === 'e' ? 1 : -1) * Math.PI / 12; }, 'rot:' + o.id); this.refreshUI(); }
       return;
     }
     const list = this.mode === 'edit' ? EDIT_TOOLS : SESSION_TOOLS;
@@ -896,7 +900,7 @@ export class Editor {
         }
       }
     }
-    toast('Nessuna stanza qui: usa il pennello o crea una "zona nebbia" con lo strumento Stanza');
+    toast(t('No room here: use the brush, or draw a “fog zone” with the Room tool'));
   }
 
   placeStamp(x: number, y: number) {
@@ -930,20 +934,20 @@ export class Editor {
     if (this.tool === 'room' && d.length >= 6) this.addRoom(d);
     else if (this.tool === 'wall' && d.length >= 4) {
       const id = uid();
-      this.mutate('Muro', () => this.rt.doc.walls.push({ id, pts: d, style: this.opts.wall.style }));
+      this.mutate(t('Wall'), () => this.rt.doc.walls.push({ id, pts: d, style: this.opts.wall.style }));
     }
     this.requestRender();
   }
   addRoom(pts: number[]) {
     const o = this.opts.room, id = uid();
     const n = this.rt.doc.rooms.filter((r) => !r.zoneOnly).length + 1;
-    this.mutate('Stanza', () => this.rt.doc.rooms.push({ id, pts, floor: o.floor, zoneOnly: o.zone || undefined, name: o.zone ? 'Zona' : `Stanza ${n}` }));
+    this.mutate(t('Room'), () => this.rt.doc.rooms.push({ id, pts, floor: o.floor, zoneOnly: o.zone || undefined, name: o.zone ? t('Zone') : t('Room {n}', { n }) }));
   }
 
   toggleDoor(id: string) {
     const d = this.rt.doc.doors.find((x) => x.id === id);
     if (!d) return;
-    this.mutate(d.open ? 'Chiudi porta' : 'Apri porta', () => { d.open = !d.open; });
+    this.mutate(d.open ? t('Close door') : t('Open door'), () => { d.open = !d.open; });
     if (this.sel?.id === id) this.refreshUI();
   }
 
@@ -970,13 +974,13 @@ export class Editor {
     if (m === 'session') {
       await this.saveNow();
       this.channel.send({ t: 'map', id: this.rt.doc.id });
-      if (!this.rt.doc.fogEnabled) toast('Suggerimento: attiva la nebbia di guerra nel pannello a destra');
+      if (!this.rt.doc.fogEnabled) toast(t('Tip: Reveal and Cover in the bottom bar turn on fog of war'));
     }
   }
 
   openPlayer() {
     const url = location.pathname + '?player=1';
-    this.playerWin = window.open(url, 'cartografo-giocatori', 'popup,width=1280,height=800');
+    this.playerWin = window.open(url, 'cartografo-player', 'popup,width=1280,height=800');
     if (this.mode !== 'session') this.setMode('session');
   }
 
@@ -1001,7 +1005,7 @@ export class Editor {
       this.channel.send({ t: 'doc', doc: this.rt.doc });
       this.sendFogFull();
       this.sendView();
-      if (!this.playerConnected) toast('TV collegata');
+      if (!this.playerConnected) toast(t('TV connected'));
       this.playerConnected = true;
       updateTopbar(this);
     }
@@ -1010,7 +1014,7 @@ export class Editor {
   // ---- combat
   combat(): Combat { return this.rt.doc.combat; }
   rollInitiative(which: 'all' | 'npc') {
-    this.mutate('Iniziativa', () => {
+    this.mutate(t('Initiative'), () => {
       for (const id of this.combat().members) {
         const t = this.rt.doc.tokens.find((x) => x.id === id);
         if (!t) continue;
@@ -1028,7 +1032,7 @@ export class Editor {
     });
   }
   nextTurn(dir = 1) {
-    this.mutate('Turno', () => {
+    this.mutate(t('Turn'), () => {
       const cb = this.combat();
       if (!cb.members.length) return;
       if (!cb.active) { cb.active = true; cb.round = 1; cb.turn = cb.members[0]; return; }
@@ -1038,8 +1042,8 @@ export class Editor {
       if (i < 0) { i = cb.members.length - 1; cb.round = Math.max(1, cb.round - 1); }
       cb.turn = cb.members[i];
     });
-    const t = this.rt.doc.tokens.find((x) => x.id === this.combat().turn);
-    if (t) this.centerOn(t.x, t.y, false);
+    const tok = this.rt.doc.tokens.find((x) => x.id === this.combat().turn);
+    if (tok) this.centerOn(tok.x, tok.y, false);
   }
   centerOn(x: number, y: number, force = true) {
     const sx = x * this.view.z + this.view.x, sy = y * this.view.z + this.view.y;
@@ -1069,30 +1073,30 @@ export class Editor {
   }
   dockHint(): string {
     if (this.mode === 'session') {
-      if (this.tool === 'fog') return this.opts.fog.mode === 'room' ? 'Clicca dentro una stanza per rivelarla tutta' : this.opts.fog.mode === 'reveal' ? 'Dipingi per rivelare la mappa ai giocatori' : 'Dipingi per coprire di nuovo';
-      if (this.tool === 'ping') return 'Clicca per attirare lo sguardo dei giocatori';
-      if (this.tool === 'measure') return 'Trascina da una casella all\'altra (anche i giocatori lo vedono)';
-      if (this.tool === 'token') return 'Clicca per piazzare la pedina · i mostri nuovi sono nascosti ai giocatori';
-      return 'Trascina le pedine · clic su una porta per aprirla · Alt + clic per un ping';
+      if (this.tool === 'fog') return this.opts.fog.mode === 'room' ? t('Click inside a room to reveal all of it') : this.opts.fog.mode === 'reveal' ? t('Paint to reveal the map to players') : t('Paint to cover it again');
+      if (this.tool === 'ping') return t('Click to draw the players’ attention');
+      if (this.tool === 'measure') return t('Drag from one square to another (players see it too)');
+      if (this.tool === 'token') return t('Click to place the token · new monsters start hidden from players');
+      return t('Drag tokens · click a door to open it · Alt + click to ping');
     }
     switch (this.tool) {
-      case 'select': return this.sel ? '' : 'Clicca un oggetto per modificarlo · trascina il vuoto per muovere la vista';
-      case 'terrain': return this.opts.terrain.erase ? 'Trascina per cancellare la texture scelta' : 'Trascina per dipingere · [ ] cambiano la dimensione';
-      case 'room': return this.opts.room.zone ? 'Disegna una zona invisibile da rivelare con un clic durante il gioco' : this.opts.room.shape === 'rect' ? 'Trascina sulla griglia per creare una stanza — i muri si disegnano da soli' : 'Clicca i vertici · doppio clic o Invio per chiudere';
-      case 'cave': return this.opts.cave.erase ? 'Trascina per riempire di roccia' : 'Trascina per scavare gallerie con pareti naturali';
-      case 'wall': return 'Clicca per aggiungere punti · doppio clic o Invio per finire · Alt per punti liberi';
-      case 'door': return 'Clicca su un bordo della griglia · clic su una porta esistente per aprirla';
-      case 'text': return 'Clicca sulla mappa per scrivere';
-      case 'marker': return 'Clicca per piazzare un segnaposto con note segrete';
-      case 'token': return 'Clicca per piazzare una pedina';
-      case 'measure': return 'Trascina da una casella all\'altra';
+      case 'select': return this.sel ? '' : t('Click an object to edit it · drag empty space to pan');
+      case 'terrain': return this.opts.terrain.erase ? t('Drag to erase the selected texture') : t('Drag to paint · [ ] change the size');
+      case 'room': return this.opts.room.zone ? t('Draw an invisible zone you can reveal with one click during play') : this.opts.room.shape === 'rect' ? t('Drag on the grid to create a room — walls draw themselves') : t('Click the corners · double-click or Enter to close');
+      case 'cave': return this.opts.cave.erase ? t('Drag to fill with rock') : t('Drag to dig tunnels with natural walls');
+      case 'wall': return t('Click to add points · double-click or Enter to finish · Alt for free points');
+      case 'door': return t('Click a grid edge · click an existing door to open it');
+      case 'text': return t('Click on the map to write');
+      case 'marker': return t('Click to place a marker with secret notes');
+      case 'token': return t('Click to place a token');
+      case 'measure': return t('Drag from one square to another');
       default: return '';
     }
   }
   ensureFog() {
     if (this.rt.doc.fogEnabled) return;
-    this.mutate('Nebbia', () => { this.rt.doc.fogEnabled = true; });
-    toast('Nebbia di guerra attivata');
+    this.mutate(t('Fog'), () => { this.rt.doc.fogEnabled = true; });
+    toast(t('Fog of war enabled'));
   }
   zoomCenter(k: number) {
     const r = this.canvas.getBoundingClientRect();
@@ -1104,7 +1108,7 @@ export class Editor {
     if (!e) return;
     e.className = 'save-status ' + st;
     e.innerHTML = '';
-    e.append(icon(st === 'error' ? 'x' : 'check', 14), st === 'saving' ? 'Salvataggio…' : st === 'saved' ? 'Salvato' : 'Errore di salvataggio');
+    e.append(icon(st === 'error' ? 'x' : 'check', 14), st === 'saving' ? t('Saving…') : st === 'saved' ? t('Saved') : t('Save error'));
   }
   async showHome() { await showHome(this); }
   hideHome() { hideHome(this); }
@@ -1288,14 +1292,14 @@ export class Editor {
   // ======================================================================== misc
   async exportPNG(scale: number, grid: boolean, tokens: boolean) {
     const rt = this.rt;
-    this.showBusy('Esporto l\'immagine…');
+    this.showBusy(t('Exporting image…'));
     await nextFrame();
     try {
       const c = makeCanvas(rt.W * scale, rt.H * scale);
       renderScene(ctx2d(c), rt, { z: scale, x: 0, y: 0 }, c.width, c.height, 1, { player: true, fogAlpha: 0, markers: false, grid, tokens, ambientScale: 1, time: 0, background: null });
       const blob = await canvasToBlob(c);
       const { downloadBlob } = await import('./util');
-      downloadBlob(blob, (rt.doc.name || 'mappa').replace(/[^\w\- àèéìòù]/gi, '') + '.png');
+      downloadBlob(blob, (rt.doc.name || 'map').replace(/[^\w\- àèéìòù]/gi, '') + '.png');
     } finally { this.hideBusy(); }
   }
 

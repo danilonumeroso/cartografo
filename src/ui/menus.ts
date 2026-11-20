@@ -6,25 +6,35 @@ import { migrateDoc, WallStyle } from '../model';
 import { deleteMap, getMap, listAssets, listMaps, putAsset, putMap, StoredMap } from '../storage';
 import { blobToDataURL, dataURLToBlob, downloadBlob, uid } from '../util';
 import { FLOORS, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
+import { lang, LANGS, setLang, t } from '../i18n';
 
 export function moreMenu(ed: Editor, anchor: HTMLElement) {
   document.querySelector('.menu')?.remove();
   const r = anchor.getBoundingClientRect();
   const item = (ico: string, label: string, fn: () => void) => h('button', { onclick: () => { close(); fn(); } }, icon(ico, 18), label);
   const menu = h('div', { class: 'menu', role: 'menu', style: { top: r.bottom + 8 + 'px', right: window.innerWidth - r.right + 'px' } },
-    item('settings', 'Impostazioni mappa…', () => mapSettings(ed)),
-    item('map', 'Le tue mappe', () => ed.showHome()),
+    item('settings', t('Map settings…'), () => mapSettings(ed)),
+    item('map', t('Your maps'), () => ed.showHome()),
     h('div', { class: 'menu-sep' }),
-    item('image', 'Esporta immagine PNG…', () => exportPngDialog(ed)),
-    item('upload', 'Esporta questa mappa (.json)', async () => downloadJSON([await ed.storedCurrent()], ed.rt.doc.name)),
-    item('upload', 'Backup di tutte le mappe', () => backupAll(ed)),
-    item('download', 'Importa mappa o backup…', () => importFile(ed)),
+    item('image', t('Export PNG image…'), () => exportPngDialog(ed)),
+    item('upload', t('Export this map (.json)'), async () => downloadJSON([await ed.storedCurrent()], ed.rt.doc.name)),
+    item('upload', t('Back up all maps'), () => backupAll(ed)),
+    item('download', t('Import map or backup…'), () => importFile(ed)),
     h('div', { class: 'menu-sep' }),
-    item('help', 'Aiuto e scorciatoie', () => helpDialog()));
+    item('help', t('Help & shortcuts'), () => helpDialog()),
+    item('globe', `${t('Language')}: ${LANGS.find((l) => l.id === lang)!.name}`, () => switchLang(ed)));
   document.body.appendChild(menu);
   const off = (e: PointerEvent) => { if (!menu.contains(e.target as Node)) close(); };
   const close = () => { menu.remove(); window.removeEventListener('pointerdown', off, true); };
   setTimeout(() => window.addEventListener('pointerdown', off, true));
+}
+
+async function switchLang(ed: Editor) {
+  const next = lang === 'en' ? 'it' : 'en';
+  if (ed.rt) await ed.saveNow();
+  setLang(next);
+  ed.channel.send({ t: 'lang' });
+  location.reload();
 }
 
 export function mapSettings(ed: Editor) {
@@ -39,43 +49,43 @@ export function mapSettings(ed: Editor) {
     class: 'swatch' + (f === doc.bg ? ' on' : ''), title: texName(f),
     onclick: () => { doc.bg = f; ed.rt.engine.invalidateAll(); ed.changed('settings'); bgGrid.querySelectorAll('.swatch').forEach((b) => b.classList.toggle('on', (b as HTMLElement).title === texName(f))); },
   }, h('img', { src: texSwatch(f), alt: '' }), h('span', null, texName(f)))));
-  const close = modal('Impostazioni mappa', h('div', { class: 'settings' },
-    h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Nome'), name),
-    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Dimensioni in caselle (l\'angolo in alto a sinistra resta fermo)'),
+  const close = modal(t('Map settings'), h('div', { class: 'settings' },
+    h('label', { class: 'field' }, h('span', { class: 'field-label' }, t('Name')), name),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Size in squares (the top-left corner stays put)')),
       h('div', { class: 'row' }, cols, h('span', null, '×'), rows, h('button', { class: 'chip-btn', onclick: () => {
         const c = Math.max(5, Math.min(80, +cols.value)), r = Math.max(5, Math.min(80, +rows.value));
         if (c === doc.cols && r === doc.rows) return;
-        ed.rt.resize(c, r); ed.hist.clear(); ed.fitView(); ed.changed('masks'); toast('Mappa ridimensionata');
-      } }, 'Applica'))),
-    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Terreno di base'), bgGrid),
-    listPicker<WallStyle>('Muri delle stanze', WALL_NAMES, doc.wallStyle, (v) => { doc.wallStyle = v; ed.rt.engine.invalidateAll(); ed.changed('settings'); close(); mapSettings(ed); }, (v) => WALL_SWATCH[v]),
-    h('h3', null, 'Griglia'),
-    h('div', { class: 'row' }, toggle('Mostra', g.show, (v) => { g.show = v; ed.changed('objects'); }), toggle('Anche sulla TV', g.showPlayers, (v) => { g.showPlayers = v; ed.changed('objects'); })),
-    h('div', { class: 'row' }, h('label', { class: 'color-dot' }, grid, h('span', null, 'Colore')), h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, 'Piedi per casella'), feet)),
-    miniSlider('Opacità', g.opacity, 0.05, 1, 0.05, (v) => { g.opacity = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
-    h('h3', null, 'Luce e nebbia'),
-    miniSlider('Oscurità ambientale', doc.ambient, 0, 0.95, 0.05, (v) => { doc.ambient = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
-    toggle('Anteprima completa delle luci mentre prepari', ed.opts.previewLights, (v) => { ed.opts.previewLights = v; ed.requestRender(); }),
-    toggle('Nebbia di guerra attiva', doc.fogEnabled, (v) => { ed.mutate('Nebbia', () => { doc.fogEnabled = v; }); }),
-    h('h3', null, 'Rigenera'),
+        ed.rt.resize(c, r); ed.hist.clear(); ed.fitView(); ed.changed('masks'); toast(t('Map resized'));
+      } }, t('Apply')))),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Base terrain')), bgGrid),
+    listPicker<WallStyle>(t('Room walls'), WALL_NAMES, doc.wallStyle, (v) => { doc.wallStyle = v; ed.rt.engine.invalidateAll(); ed.changed('settings'); close(); mapSettings(ed); }, (v) => WALL_SWATCH[v]),
+    h('h3', null, t('Grid')),
+    h('div', { class: 'row' }, toggle(t('Show'), g.show, (v) => { g.show = v; ed.changed('objects'); }), toggle(t('Also on the TV'), g.showPlayers, (v) => { g.showPlayers = v; ed.changed('objects'); })),
+    h('div', { class: 'row' }, h('label', { class: 'color-dot' }, grid, h('span', null, t('Color'))), h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, t('Feet per square')), feet)),
+    miniSlider(t('Opacity'), g.opacity, 0.05, 1, 0.05, (v) => { g.opacity = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
+    h('h3', null, t('Light & fog')),
+    miniSlider(t('Ambient darkness'), doc.ambient, 0, 0.95, 0.05, (v) => { doc.ambient = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
+    toggle(t('Full lighting preview while preparing'), ed.opts.previewLights, (v) => { ed.opts.previewLights = v; ed.requestRender(); }),
+    toggle(t('Fog of war enabled'), doc.fogEnabled, (v) => { ed.mutate(t('Fog'), () => { doc.fogEnabled = v; }); }),
+    h('h3', null, t('Regenerate')),
     h('div', { class: 'row' },
       h('select', { onchange: (e: Event) => { gen = (e.target as HTMLSelectElement).value as GenKind; } }, ...Object.entries(GEN_NAMES).map(([k, v]) => h('option', { value: k }, v))),
-      h('button', { class: 'chip-btn', onclick: () => { if (confirm('Sostituire tutto il contenuto con una mappa generata? Non si può annullare.')) { close(); ed.regenerate(gen); } } }, icon('dice', 16), 'Rigenera')),
-    h('h3', null, 'Zona pericolosa'),
+      h('button', { class: 'chip-btn', onclick: () => { if (confirm(t('Replace everything with a generated map? This cannot be undone.'))) { close(); ed.regenerate(gen); } } }, icon('dice', 16), t('Regenerate'))),
+    h('h3', null, t('Danger zone')),
     h('button', { class: 'chip-btn danger', onclick: async () => {
-      if (!confirm(`Eliminare definitivamente "${doc.name}"?`)) return;
+      if (!confirm(t('Permanently delete “{name}”?', { name: doc.name }))) return;
       close();
       ed.forgetCurrent();
       await deleteMap(doc.id);
       await ed.refreshMaps();
       if (ed.maps.length) await ed.openMap(ed.maps[0].id); else ed.showHome();
-    } }, icon('trash', 16), 'Elimina questa mappa')), [], false);
+    } }, icon('trash', 16), t('Delete this map'))), [], false);
 }
 
 export async function duplicateMap(id: string) {
   const rec = await getMap(id);
   if (!rec) return;
-  const copy: StoredMap = { ...rec, id: uid(), name: rec.name + ' (copia)', updatedAt: Date.now(), doc: { ...rec.doc } };
+  const copy: StoredMap = { ...rec, id: uid(), name: rec.name + t(' (copy)'), updatedAt: Date.now(), doc: { ...rec.doc } };
   copy.doc.id = copy.id; copy.doc.name = copy.name;
   await putMap(copy);
 }
@@ -86,12 +96,12 @@ function exportPngDialog(ed: Editor) {
   const info = h('p', { class: 'hint' }, px());
   const seg = h('div', { class: 'seg' }, ...[1, 2].map((s) => h('button', {
     class: s === scale ? 'on' : '', onclick: () => { scale = s; info.textContent = px(); seg.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === s - 1)); },
-  }, s === 1 ? '100 px/casella' : '200 px/casella (stampa)')));
-  modal('Esporta immagine', h('div', null, seg, info,
-    check('Includi la griglia', grid, (v) => { grid = v; }),
-    check('Includi le pedine visibili', tokens, (v) => { tokens = v; }),
-    h('p', { class: 'hint' }, 'Elementi nascosti ai giocatori, nebbia e segnaposti non vengono esportati. Per stampare a scala reale (1 casella = 2,54 cm) usa 100 px/casella a 100 dpi.')),
-  [{ label: 'Annulla' }, { label: 'Esporta', cls: 'accent', onClick: () => { ed.exportPNG(scale, grid, tokens); } }]);
+  }, s === 1 ? t('100 px/square') : t('200 px/square (print)'))));
+  modal(t('Export image'), h('div', null, seg, info,
+    check(t('Include the grid'), grid, (v) => { grid = v; }),
+    check(t('Include visible tokens'), tokens, (v) => { tokens = v; }),
+    h('p', { class: 'hint' }, t('Items hidden from players, fog and markers are not exported. To print at real scale (1 square = 1 inch) use 100 px/square at 100 dpi.'))),
+  [{ label: t('Cancel') }, { label: t('Export'), cls: 'accent', onClick: () => { ed.exportPNG(scale, grid, tokens); } }]);
 }
 
 export async function backupAll(ed: Editor) {
@@ -140,30 +150,30 @@ export async function importFile(ed: Editor) {
       first ||= doc.id;
     }
     await ed.refreshMaps();
-    toast(`Importate ${data.maps.length} mappe`);
+    toast(t('Imported {n} maps', { n: data.maps.length }));
     if (first) { ed.hideHome(); await ed.openMap(first); }
   } catch (e) {
     console.error(e);
-    toast('File non valido');
+    toast(t('Invalid file'));
   }
 }
 
 export function helpDialog() {
   const k = (keys: string, what: string) => h('tr', null, h('td', null, h('kbd', null, keys)), h('td', null, what));
-  modal('Aiuto', h('div', { class: 'help' },
-    h('h3', null, 'Come si usa'),
+  modal(t('Help'), h('div', { class: 'help' },
+    h('h3', null, t('How it works')),
     h('ol', null,
-      h('li', null, h('b', null, 'Prepara'), ': usa le cinque azioni a sinistra — Seleziona, Dipingi, Costruisci, Arreda, Annota. Le opzioni compaiono nella barra in basso.'),
-      h('li', null, 'Seleziona qualcosa per modificarlo: la scheda appare accanto all\'oggetto.'),
-      h('li', null, 'Collega la TV con ', h('b', null, 'Schermo TV'), ', trascina la finestra sul televisore e premi F per lo schermo intero.'),
-      h('li', null, h('b', null, 'Gioca'), ': muovi le pedine, rivela la nebbia, apri le porte e gestisci l\'iniziativa nel pannello a sinistra.')),
-    h('h3', null, 'Scorciatoie'),
+      h('li', null, h('b', null, t('Prepare')), t(': use the five actions on the left — Select, Paint, Build, Furnish, Annotate. Their options appear in the bottom bar.')),
+      h('li', null, t('Select something to edit it: its card appears right next to it.')),
+      h('li', null, t('Connect the TV with '), h('b', null, t('TV screen')), t(', drag the window onto the TV and press F for full screen.')),
+      h('li', null, h('b', null, t('Play')), t(': move tokens, reveal fog, open doors and run initiative from the left panel.'))),
+    h('h3', null, t('Shortcuts')),
     h('table', null,
-      k('V B R O T', 'Seleziona · Dipingi · Costruisci · Arreda · Annota'),
-      k('C W D L K M U', 'Caverna · Muro · Porta · Luce · Pedina · Segnaposto · Righello'),
-      k('Spazio + trascina / tasto destro', 'muovi la vista'), k('Rotella / pinch', 'zoom'), k('0', 'adatta alla finestra'),
-      k('Ctrl/Cmd + Z', 'annulla'), k('Shift + Ctrl/Cmd + Z', 'ripeti'), k('Ctrl/Cmd + D', 'duplica'), k('Canc', 'elimina'),
-      k('Q / E', 'ruota'), k('Frecce', 'sposta (pedine di 1 casella)'), k('[ / ]', 'dimensione pennello'),
-      k('Invio / doppio clic', 'chiudi forma libera o muro'), k('Esc', 'annulla / deseleziona'), k('Alt', 'senza aggancio alla griglia')),
-    h('p', { class: 'hint' }, 'Tutto viene salvato automaticamente nel browser. Ogni tanto fai un backup dal menu ⋯.')), [], true);
+      k('V B R O T', t('Select · Paint · Build · Furnish · Annotate')),
+      k('C W D L K M U', t('Cave · Wall · Door · Light · Token · Marker · Ruler')),
+      k(t('Space + drag / right mouse button'), t('pan the view')), k(t('Wheel / pinch'), t('zoom')), k('0', t('fit to window')),
+      k('Ctrl/Cmd + Z', t('undo')), k('Shift + Ctrl/Cmd + Z', t('redo')), k('Ctrl/Cmd + D', t('duplicate')), k(t('Del'), t('delete selection')),
+      k('Q / E', t('rotate')), k(t('Arrows'), t('move selection (tokens by 1 square)')), k('[ / ]', t('brush size')),
+      k(t('Enter / double-click'), t('close freeform shape or wall')), k('Esc', t('cancel / deselect')), k('Alt', t('no grid snapping'))),
+    h('p', { class: 'hint' }, t('Everything is saved automatically in the browser. Make a backup from the ⋯ menu every now and then.'))), [], true);
 }

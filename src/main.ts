@@ -1,9 +1,12 @@
 import './style.css';
 import { preloadTextures } from './textures';
 import { nextFrame } from './util';
+import { t } from './i18n';
 
 const root = document.getElementById('app')!;
 const loader = document.getElementById('loader');
+const loaderText = document.getElementById('loader-text');
+if (loaderText) loaderText.textContent = t('Preparing brushes and parchment…');
 
 (async () => {
   await nextFrame();
@@ -20,5 +23,5 @@ const loader = document.getElementById('loader');
   loader?.remove();
 })().catch((e) => {
   console.error(e);
-  if (loader) loader.textContent = 'Errore di avvio: ' + (e?.message || e);
+  if (loader) loader.textContent = t('Startup error: ') + (e?.message || e);
 });

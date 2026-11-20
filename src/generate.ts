@@ -3,9 +3,10 @@ import type { MapRuntime } from './runtime';
 import { STAMP_BY_ID, VARIANTS } from './stamps';
 import { ctx2d, makeCanvas, mulberry32, pick, rint, Rng, rrange, uid } from './util';
 import { fbmTile, sampleWrap } from './noise';
+import { t } from './i18n';
 
 export type GenKind = 'dungeon' | 'cave' | 'forest' | 'tavern';
-export const GEN_NAMES: Record<GenKind, string> = { dungeon: 'Dungeon', cave: 'Caverna', forest: 'Radura nel bosco', tavern: 'Taverna' };
+export const GEN_NAMES: Record<GenKind, string> = { dungeon: 'Dungeon', cave: t('Cave'), forest: t('Forest clearing'), tavern: t('Tavern') };
 
 class B {
   doc: MapDoc; r: Rng; rt: MapRuntime;
@@ -94,7 +95,7 @@ function dungeon(b: B) {
     const i = rint(r, 0, boxes.length - 1), j = rint(r, 0, boxes.length - 1);
     if (i !== j) links.push([i, j]);
   }
-  const roomObjs = boxes.map((o, i) => b.room(o.x, o.y, o.w, o.h, r() < 0.2 ? 'tiles' : 'flagstone', `Stanza ${i + 1}`));
+  const roomObjs = boxes.map((o, i) => b.room(o.x, o.y, o.w, o.h, r() < 0.2 ? 'tiles' : 'flagstone', t('Room {n}', { n: i + 1 })));
   const doorAt = new Set<string>();
   for (const [i, j] of links) {
     const [ax, ay] = center(boxes[i]), [bx, by] = center(boxes[j]);
@@ -113,7 +114,7 @@ function dungeon(b: B) {
       if (!run.length) return;
       const xs = run.map((c) => c[0]), ys = run.map((c) => c[1]);
       const x0 = Math.min(...xs), y0 = Math.min(...ys);
-      b.room(x0, y0, Math.max(...xs) - x0 + 1, Math.max(...ys) - y0 + 1, 'flagstone').name = 'Corridoio';
+      b.room(x0, y0, Math.max(...xs) - x0 + 1, Math.max(...ys) - y0 + 1, 'flagstone').name = t('Corridor');
       run = [];
     };
     for (let k = 0; k < cells.length; k++) {
@@ -152,7 +153,7 @@ function dungeon(b: B) {
     // torches on top wall
     if (r() < 0.85) b.stamp('torch', o.x + o.w / 2, o.y + 0.22);
     if (o.w >= 6 && r() < 0.6) b.stamp('torch', o.x + 0.22, o.y + o.h / 2);
-    if (i === 0) { b.stamp('stairs', o.x + 0.5, o.y + o.h - 1); b.label('Ingresso', cx, o.y + o.h - 0.4, 30); return; }
+    if (i === 0) { b.stamp('stairs', o.x + 0.5, o.y + o.h - 1); b.label(t('Entrance'), cx, o.y + o.h - 0.4, 30); return; }
     const theme = pick(r, themes);
     const free = () => [rrange(r, o.x + 0.8, o.x + o.w - 0.8), rrange(r, o.y + 0.8, o.y + o.h - 0.8)];
     switch (theme) {
@@ -278,7 +279,7 @@ function cave(b: B) {
   for (let k = 0; k < area / 50; k++) b.stamp(pick(r, ['bones', 'rubble', 'puddle']), ...pick(r, open), r() * 6.28);
   for (let k = 0; k < area / 60; k++) b.paint('moss', ...pick(r, open), rrange(r, 0.8, 1.6), 0.1, 0.6);
   const [ex, ey] = open[0];
-  b.label('Ingresso', ex, ey, 30);
+  b.label(t('Entrance'), ex, ey, 30);
 }
 
 // ------------------------------------------------------------------ forest
@@ -348,9 +349,9 @@ function tavern(b: B) {
   const kw = 5;
   // street
   for (let x = -1; x <= C + 1; x += 0.6) b.paint('cobble', x, y0 + hh + 2.2, 1.6, 0.4, 0.8);
-  b.room(x0, y0, hw, hh, 'wood', 'Sala comune');
-  b.room(x0 + hw, y0, kw, Math.ceil(hh / 2), 'flagstone', 'Cucina');
-  b.room(x0 + hw, y0 + Math.ceil(hh / 2), kw, hh - Math.ceil(hh / 2), 'wood', 'Dispensa');
+  b.room(x0, y0, hw, hh, 'wood', t('Common room'));
+  b.room(x0 + hw, y0, kw, Math.ceil(hh / 2), 'flagstone', t('Kitchen'));
+  b.room(x0 + hw, y0 + Math.ceil(hh / 2), kw, hh - Math.ceil(hh / 2), 'wood', t('Pantry'));
   // inner walls
   doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, y0 * CELL, (x0 + hw) * CELL, (y0 + hh) * CELL], style: 'wood' });
   doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL, (x0 + hw + kw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL], style: 'wood' });
@@ -392,5 +393,5 @@ function tavern(b: B) {
     if (x > x0 - 1.5 && x < x0 + hw + kw + 1.5 && y > y0 - 1.5 && y < y0 + hh + 3.8) continue;
     b.stamp(pick(r, ['tree', 'bush', 'tallgrass', 'flowers', 'pine', 'rocks']), x, y, r() * 6.28, rrange(r, 0.8, 1.2));
   }
-  b.label('La Botte Allegra', x0 + hw / 2, y0 - 0.8, 48, false).font = 'Pirata One';
+  b.label(t('The Jolly Barrel'), x0 + hw / 2, y0 - 0.8, 48, false).font = 'Pirata One';
 }

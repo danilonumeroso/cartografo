@@ -6,6 +6,7 @@ import { drawMeasure, drawPing, markerGeom, renderScene, View } from './render';
 import { MapRuntime } from './runtime';
 import { getMap } from './storage';
 import { clamp, nextFrame } from './util';
+import { t } from './i18n';
 
 const LS = 'cartografo-player';
 interface Prefs { ppi: number; real: boolean; rot: number }
@@ -26,10 +27,10 @@ export class Player {
   pings: { x: number; y: number; t: number }[] = [];
   measure: { a: [number, number]; b: [number, number] } | null = null;
   needRender = true;
-  waiting = h('div', { class: 'player-wait' }, h('div', { class: 'brand-mark big' }, '⚔'), h('h1', null, 'Vista giocatori'), h('p', null, 'In attesa del Dungeon Master…'), h('small', null, 'Apri questa finestra dal pulsante "📺 Vista giocatori" dell\'editor.'));
+  waiting = h('div', { class: 'player-wait' }, h('div', { class: 'brand-mark big' }, '⚔'), h('h1', null, t('Player view')), h('p', null, t('Waiting for the Dungeon Master…')), h('small', null, t('Open this window from the “TV screen” button in the editor.')));
   initBar = h('div', { class: 'init-bar', hidden: true });
   popup = h('div', { class: 'popup', hidden: true });
-  gear = h('button', { class: 'player-gear', title: 'Impostazioni schermo', onclick: () => this.settings() }, '⚙');
+  gear = h('button', { class: 'player-gear', title: t('Screen settings'), onclick: () => this.settings() }, '⚙');
   private drag: any = null;
   private lastMove = 0;
   private lastLastDoc = '';
@@ -40,7 +41,7 @@ export class Player {
   }
 
   async init() {
-    document.title = 'Vista giocatori · Cartografo';
+    document.title = t('Player view · Cartografo');
     this.root.classList.add('player');
     this.root.append(this.canvas, this.initBar, this.popup, this.gear, this.waiting);
     await assets.loadAll();
@@ -110,6 +111,7 @@ export class Player {
       case 'measure': this.measure = m.a && m.b ? { a: m.a, b: m.b } : null; this.needRender = true; break;
       case 'bye': this.rt = null; this.waiting.hidden = false; break;
       case 'dmhello': this.channel.send({ t: 'hello' }); break;
+      case 'lang': location.reload(); break;
     }
   }
 
@@ -214,7 +216,7 @@ export class Player {
     if (!cb || !cb.active) { this.initBar.hidden = true; return; }
     const toks = new Map(this.rt!.doc.tokens.map((t) => [t.id, t]));
     this.initBar.innerHTML = '';
-    this.initBar.append(h('div', { class: 'init-round' }, `Round ${cb.round}`));
+    this.initBar.append(h('div', { class: 'init-round' }, t('Round {n}', { n: cb.round })));
     for (const id of cb.members) {
       const t = toks.get(id);
       if (!t || t.hidden) continue;
@@ -236,21 +238,21 @@ export class Player {
     const ppiOut = h('span', null, String(Math.round(p.ppi)));
     const setPpi = (v: number) => { p.ppi = clamp(v, 20, 400); ppiOut.textContent = String(Math.round(p.ppi)); range.value = String(p.ppi); sizeCard(); this.savePrefs(); if (p.real) { this.view.z = this.realZ(); this.needRender = true; } };
     const range = h('input', { type: 'range', min: 20, max: 400, step: 0.5, value: p.ppi, oninput: () => setPpi(+range.value) });
-    const diag = h('input', { type: 'number', placeholder: 'es. 55', min: 5, max: 120, step: 0.5 });
+    const diag = h('input', { type: 'number', placeholder: t('e.g. 55'), min: 5, max: 120, step: 0.5 });
     const box = h('div', { class: 'player-settings modal' },
-      h('header', null, h('h2', null, 'Impostazioni schermo'), h('button', { class: 'icon-btn', onclick: () => box.remove() }, '✕')),
+      h('header', null, h('h2', null, t('Screen settings')), h('button', { class: 'icon-btn', onclick: () => box.remove() }, '✕')),
       h('div', { class: 'modal-body' },
-        h('h3', null, 'Orientamento'),
+        h('h3', null, t('Orientation')),
         h('div', { class: 'seg' }, ...[0, 90, 180, 270].map((r) => h('button', { class: p.rot === r ? 'on' : '', onclick: (e: MouseEvent) => { p.rot = r; this.savePrefs(); this.layout(); (e.currentTarget as HTMLElement).parentElement!.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.currentTarget)); } }, r + '°'))),
-        h('p', { class: 'hint' }, 'Con la TV sdraiata sul tavolo ruota di 180° per chi siede dall\'altra parte.'),
-        h('h3', null, 'Scala reale (miniature)'),
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: p.real, onchange: (e: Event) => { p.real = (e.target as HTMLInputElement).checked; this.savePrefs(); this.view.z = p.real ? this.realZ() : this.view.z; this.needRender = true; } }), h('span', null, '1 casella = 1 pollice (2,54 cm)')),
-        h('p', { class: 'hint' }, 'Appoggia una carta di credito sul rettangolo e regola finché coincide perfettamente.'),
+        h('p', { class: 'hint' }, t('With the TV lying flat on the table, rotate 180° for players on the other side.')),
+        h('h3', null, t('Real scale (miniatures)')),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: p.real, onchange: (e: Event) => { p.real = (e.target as HTMLInputElement).checked; this.savePrefs(); this.view.z = p.real ? this.realZ() : this.view.z; this.needRender = true; } }), h('span', null, t('1 square = 1 inch (2.54 cm)'))),
+        h('p', { class: 'hint' }, t('Hold a credit card against the rectangle and adjust until it matches exactly.')),
         card,
-        h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => setPpi(p.ppi - 1) }, '−'), range, h('button', { class: 'btn small', onclick: () => setPpi(p.ppi + 1) }, '+'), ppiOut, h('small', null, 'px/pollice')),
-        h('div', { class: 'row' }, h('span', null, 'Oppure diagonale dello schermo (pollici):'), diag,
-          h('button', { class: 'btn small', onclick: () => { const d = +diag.value; if (d > 0) setPpi(Math.hypot(screen.width, screen.height) / d); } }, 'Calcola')),
-        h('h3', null, 'Schermo intero'),
+        h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => setPpi(p.ppi - 1) }, '−'), range, h('button', { class: 'btn small', onclick: () => setPpi(p.ppi + 1) }, '+'), ppiOut, h('small', null, t('px/inch'))),
+        h('div', { class: 'row' }, h('span', null, t('Or screen diagonal (inches):')), diag,
+          h('button', { class: 'btn small', onclick: () => { const d = +diag.value; if (d > 0) setPpi(Math.hypot(screen.width, screen.height) / d); } }, t('Compute'))),
+        h('h3', null, t('Full screen')),
         h('button', { class: 'btn', onclick: () => this.toggleFull() }, '⛶ Schermo intero (F)')));
     document.body.appendChild(box);
   }

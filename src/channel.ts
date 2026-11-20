@@ -11,7 +11,8 @@ export type Msg =
   | { t: 'measure'; a: [number, number] | null; b: [number, number] | null }
   | { t: 'bye' }
   | { t: 'dmhello' }
-  | { t: 'pbye' };
+  | { t: 'pbye' }
+  | { t: 'lang' };
 
 export class Channel {
   private bc = new BroadcastChannel('cartografo-dnd-session');

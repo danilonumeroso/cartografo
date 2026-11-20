@@ -5,6 +5,7 @@ import type { MapRuntime } from './runtime';
 import { STAMP_BY_ID, STAMP_PAD, stampImage } from './stamps';
 import { getTexture } from './textures';
 import { ctx2d, makeCanvas, pattern, rgba } from './util';
+import { t } from './i18n';
 
 export interface View { z: number; x: number; y: number }
 export interface RenderOpts {
@@ -400,7 +401,7 @@ export function drawMeasure(ctx: C2D, a: [number, number], b: [number, number], 
   ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
   ctx.setLineDash([]);
   for (const p of [a, b]) { ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.arc(p[0], p[1], 5 / z, 0, Math.PI * 2); ctx.fill(); }
-  const txt = `${feet} ft · ${squares} ${squares === 1 ? 'casella' : 'caselle'}`;
+  const txt = t(squares === 1 ? '{ft} ft · {n} square' : '{ft} ft · {n} squares', { ft: feet, n: squares });
   ctx.font = `700 ${15 / z}px system-ui, sans-serif`;
   const tw = ctx.measureText(txt).width;
   const mx = b[0] + 14 / z, my = b[1] - 14 / z;

@@ -3,16 +3,17 @@ import { DoorKind, TokenKind, TokenSize, WallStyle } from '../model';
 import { stampThumb } from '../stamps';
 import { getTexture, TEX_BY_ID, TEXTURES } from '../textures';
 import { ctx2d, makeCanvas } from '../util';
+import { t } from '../i18n';
 
-export const WALL_NAMES: [WallStyle, string][] = [['stone', 'Pietra'], ['brick', 'Mattoni'], ['wood', 'Legno'], ['cave', 'Roccia grezza']];
+export const WALL_NAMES: [WallStyle, string][] = [['stone', t('Stone')], ['brick', t('Brick')], ['wood', t('Wood')], ['cave', t('Rough rock')]];
 export const WALL_SWATCH: Record<WallStyle, string> = { stone: '#7d786f', brick: '#8a4b36', wood: '#5b3e26', cave: '#655a50' };
-export const DOOR_NAMES: [DoorKind, string][] = [['wood', 'Legno'], ['double', 'Doppia'], ['iron', 'Grata'], ['secret', 'Segreta'], ['arch', 'Arco']];
+export const DOOR_NAMES: [DoorKind, string][] = [['wood', t('Wood')], ['double', t('Double')], ['iron', t('Portcullis')], ['secret', t('Secret')], ['arch', t('Archway')]];
 export const FLOORS = TEXTURES.filter((t) => t.floor).map((t) => t.id);
 export const TOKEN_PRESETS: { name: string; kind: TokenKind; size: TokenSize }[] = [
-  { name: 'Eroe', kind: 'pc', size: 'medium' }, { name: 'Goblin', kind: 'monster', size: 'small' }, { name: 'Coboldo', kind: 'monster', size: 'small' },
-  { name: 'Scheletro', kind: 'monster', size: 'medium' }, { name: 'Orco', kind: 'monster', size: 'medium' }, { name: 'Lupo', kind: 'monster', size: 'medium' },
-  { name: 'Ogre', kind: 'monster', size: 'large' }, { name: 'Troll', kind: 'monster', size: 'large' }, { name: 'Drago', kind: 'monster', size: 'huge' },
-  { name: 'Mercante', kind: 'npc', size: 'medium' }, { name: 'Guardia', kind: 'ally', size: 'medium' },
+  { name: t('Hero'), kind: 'pc', size: 'medium' }, { name: 'Goblin', kind: 'monster', size: 'small' }, { name: t('Kobold'), kind: 'monster', size: 'small' },
+  { name: t('Skeleton'), kind: 'monster', size: 'medium' }, { name: t('Orc'), kind: 'monster', size: 'medium' }, { name: t('Wolf'), kind: 'monster', size: 'medium' },
+  { name: 'Ogre', kind: 'monster', size: 'large' }, { name: 'Troll', kind: 'monster', size: 'large' }, { name: t('Dragon'), kind: 'monster', size: 'huge' },
+  { name: t('Merchant'), kind: 'npc', size: 'medium' }, { name: t('Guard'), kind: 'ally', size: 'medium' },
 ];
 
 const swatchCache = new Map<string, string>();

@@ -1,5 +1,6 @@
 import { fbmTile } from './noise';
 import { clamp, ctx2d, hexToRgb, lerp, makeCanvas, mulberry32, Rng, rrange, smoothstep } from './util';
+import { t } from './i18n';
 
 /** Texture tile size in world px (4 grid squares). */
 export const TS = 400;
@@ -7,22 +8,22 @@ export const TS = 400;
 export interface TexDef { id: string; name: string; layer: 'below' | 'above'; floor?: boolean; liquid?: boolean; swatch: string }
 
 export const TEXTURES: TexDef[] = [
-  { id: 'rock', name: 'Roccia scura', layer: 'below', floor: true, swatch: '#3a3632' },
-  { id: 'grass', name: 'Erba', layer: 'below', floor: true, swatch: '#6b9a3c' },
-  { id: 'forest', name: 'Sottobosco', layer: 'below', floor: true, swatch: '#4b5a2c' },
-  { id: 'dirt', name: 'Terra', layer: 'below', floor: true, swatch: '#86643f' },
-  { id: 'mud', name: 'Fango', layer: 'below', floor: true, swatch: '#57412b' },
-  { id: 'sand', name: 'Sabbia', layer: 'below', floor: true, swatch: '#dcc690' },
-  { id: 'snow', name: 'Neve', layer: 'below', floor: true, swatch: '#eef3f7' },
-  { id: 'gravel', name: 'Ghiaia', layer: 'below', floor: true, swatch: '#8a8276' },
-  { id: 'cave', name: 'Pavimento grotta', layer: 'below', floor: true, swatch: '#655a50' },
-  { id: 'cobble', name: 'Ciottolato', layer: 'below', floor: true, swatch: '#77736c' },
-  { id: 'flagstone', name: 'Lastricato', layer: 'below', floor: true, swatch: '#8a857c' },
-  { id: 'tiles', name: 'Marmo a scacchi', layer: 'below', floor: true, swatch: '#b9b2a6' },
-  { id: 'wood', name: 'Assi di legno', layer: 'below', floor: true, swatch: '#8f6239' },
-  { id: 'moss', name: 'Muschio', layer: 'above', swatch: '#5d8a30' },
-  { id: 'water', name: 'Acqua', layer: 'above', liquid: true, swatch: '#3786a0' },
-  { id: 'deep', name: 'Acqua profonda', layer: 'above', liquid: true, swatch: '#1b4a6a' },
+  { id: 'rock', name: t('Dark rock'), layer: 'below', floor: true, swatch: '#3a3632' },
+  { id: 'grass', name: t('Grass'), layer: 'below', floor: true, swatch: '#6b9a3c' },
+  { id: 'forest', name: t('Undergrowth'), layer: 'below', floor: true, swatch: '#4b5a2c' },
+  { id: 'dirt', name: t('Dirt'), layer: 'below', floor: true, swatch: '#86643f' },
+  { id: 'mud', name: t('Mud'), layer: 'below', floor: true, swatch: '#57412b' },
+  { id: 'sand', name: t('Sand'), layer: 'below', floor: true, swatch: '#dcc690' },
+  { id: 'snow', name: t('Snow'), layer: 'below', floor: true, swatch: '#eef3f7' },
+  { id: 'gravel', name: t('Gravel'), layer: 'below', floor: true, swatch: '#8a8276' },
+  { id: 'cave', name: t('Cave floor'), layer: 'below', floor: true, swatch: '#655a50' },
+  { id: 'cobble', name: t('Cobblestone'), layer: 'below', floor: true, swatch: '#77736c' },
+  { id: 'flagstone', name: t('Flagstone'), layer: 'below', floor: true, swatch: '#8a857c' },
+  { id: 'tiles', name: t('Checkered marble'), layer: 'below', floor: true, swatch: '#b9b2a6' },
+  { id: 'wood', name: t('Wooden planks'), layer: 'below', floor: true, swatch: '#8f6239' },
+  { id: 'moss', name: t('Moss'), layer: 'above', swatch: '#5d8a30' },
+  { id: 'water', name: t('Water'), layer: 'above', liquid: true, swatch: '#3786a0' },
+  { id: 'deep', name: t('Deep water'), layer: 'above', liquid: true, swatch: '#1b4a6a' },
   { id: 'lava', name: 'Lava', layer: 'above', liquid: true, swatch: '#e2571c' },
 ];
 export const TEX_BY_ID = new Map(TEXTURES.map((t) => [t.id, t]));

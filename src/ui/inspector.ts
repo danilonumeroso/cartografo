@@ -7,6 +7,7 @@ import {
 import { labelFont, markerGeom, tokenRadius } from '../render';
 import { STAMP_BY_ID, VARIANTS } from '../stamps';
 import { DOOR_NAMES, FLOORS, iconBtn, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
+import { t } from '../i18n';
 
 type M = (label: string, fn: () => void, key?: string) => void;
 
@@ -20,24 +21,24 @@ export function renderInspector(ed: Editor) {
   const id = o.id;
   const m: M = (label, fn, key) => ed.mutate(label, fn, key ? key + ':' + id : undefined);
   const session = ed.mode === 'session';
-  const del = iconBtn('trash', 'Elimina', () => ed.deleteSel(), 'danger');
-  const dup = iconBtn('copy', 'Duplica', () => ed.duplicateSel());
+  const del = iconBtn('trash', t('Delete'), () => ed.deleteSel(), 'danger');
+  const dup = iconBtn('copy', t('Duplicate'), () => ed.duplicateSel());
   switch (ed.sel.kind) {
     case 'stamp': return stampBar(ed, box, o as Stamp, m, dup, del);
     case 'wall': {
       const w = o as Wall;
       box.classList.add('toolbar');
-      box.append(h('span', { class: 'tb-title' }, 'Muro'), listPicker<WallStyle>('Stile', WALL_NAMES, w.style, (v) => { m('Stile', () => { w.style = v; }); ed.refreshUI(); }, (v) => WALL_SWATCH[v]), h('span', { class: 'tb-sep' }), dup, del);
+      box.append(h('span', { class: 'tb-title' }, t('Wall')), listPicker<WallStyle>(t('Style'), WALL_NAMES, w.style, (v) => { m(t('Style'), () => { w.style = v; }); ed.refreshUI(); }, (v) => WALL_SWATCH[v]), h('span', { class: 'tb-sep' }), dup, del);
       return;
     }
     case 'door': {
       const d = o as Door;
       box.classList.add('toolbar');
-      box.append(h('span', { class: 'tb-title' }, 'Porta'),
-        h('button', { class: 'chip-btn' + (d.open ? ' on' : ''), onclick: () => ed.toggleDoor(d.id) }, d.open ? 'Aperta' : 'Chiusa'));
+      box.append(h('span', { class: 'tb-title' }, t('Door')),
+        h('button', { class: 'chip-btn' + (d.open ? ' on' : ''), onclick: () => ed.toggleDoor(d.id) }, d.open ? t('Open') : t('Closed')));
       if (!session) box.append(
-        listPicker('Tipo', DOOR_NAMES, d.kind, (v) => { m('Tipo porta', () => { d.kind = v; }); ed.refreshUI(); }),
-        iconBtn('rotate', 'Ruota di 90°', () => m('Ruota', () => { d.rot += Math.PI / 2; })),
+        listPicker(t('Type'), DOOR_NAMES, d.kind, (v) => { m(t('Door type'), () => { d.kind = v; }); ed.refreshUI(); }),
+        iconBtn('rotate', t('Rotate 90°'), () => m(t('Rotate'), () => { d.rot += Math.PI / 2; })),
         h('span', { class: 'tb-sep' }), dup, del);
       return;
     }
@@ -50,7 +51,7 @@ export function renderInspector(ed: Editor) {
 }
 
 function cardHead(ed: Editor, title: HTMLElement | string, ...extra: HTMLElement[]) {
-  return h('div', { class: 'card-head' }, typeof title === 'string' ? h('strong', null, title) : title, ...extra, iconBtn('x', 'Chiudi', () => ed.select(null)));
+  return h('div', { class: 'card-head' }, typeof title === 'string' ? h('strong', null, title) : title, ...extra, iconBtn('x', t('Close'), () => ed.select(null)));
 }
 
 function stampBar(ed: Editor, box: HTMLElement, s: Stamp, m: M, dup: HTMLElement, del: HTMLElement) {
@@ -58,131 +59,131 @@ function stampBar(ed: Editor, box: HTMLElement, s: Stamp, m: M, dup: HTMLElement
   const isAsset = s.type.startsWith('asset:');
   const name = isAsset ? assets.recs.get(s.type.slice(6))?.name || 'Asset' : STAMP_BY_ID.get(s.type)?.name || s.type;
   const scaleTxt = h('span', { class: 'tb-val' }, s.scale.toFixed(1) + '×');
-  const setScale = (k: number) => { m('Scala', () => { s.scale = Math.max(0.1, Math.min(10, +(s.scale * k).toFixed(2))); }, 'scale'); scaleTxt.textContent = s.scale.toFixed(1) + '×'; };
+  const setScale = (k: number) => { m(t(t('Stairs')), () => { s.scale = Math.max(0.1, Math.min(10, +(s.scale * k).toFixed(2))); }, 'scale'); scaleTxt.textContent = s.scale.toFixed(1) + '×'; };
   box.append(
     h('span', { class: 'tb-title' }, name),
     h('span', { class: 'tb-sep' }),
-    iconBtn('rotate', 'Ruota di 15° (E)', () => m('Ruota', () => { s.rot += Math.PI / 12; }, 'rot')),
-    iconBtn('flip', 'Specchia', () => m('Specchia', () => { s.flip = !s.flip; })),
-    iconBtn('minus', 'Rimpicciolisci', () => setScale(1 / 1.1)), scaleTxt, iconBtn('plus', 'Ingrandisci', () => setScale(1.1)),
-    !isAsset ? iconBtn('dice', 'Altra variante', () => m('Variante', () => { s.variant = (s.variant + 1) % VARIANTS; })) : '',
+    iconBtn('rotate', t('Rotate 15° (E)'), () => m(t('Rotate'), () => { s.rot += Math.PI / 12; }, 'rot')),
+    iconBtn('flip', t('Mirror'), () => m(t('Mirror'), () => { s.flip = !s.flip; })),
+    iconBtn('minus', t('Shrink'), () => setScale(1 / 1.1)), scaleTxt, iconBtn('plus', t('Enlarge'), () => setScale(1.1)),
+    !isAsset ? iconBtn('dice', t('Another variant'), () => m(t('Variant'), () => { s.variant = (s.variant + 1) % VARIANTS; })) : '',
     h('span', { class: 'tb-sep' }),
-    iconBtn(s.hidden ? 'eyeOff' : 'eye', s.hidden ? 'Nascosto ai giocatori: mostra' : 'Visibile ai giocatori: nascondi', () => { m('Visibilità', () => { s.hidden = !s.hidden; }); ed.refreshUI(); }, s.hidden ? 'warn' : ''),
+    iconBtn(s.hidden ? 'eyeOff' : 'eye', s.hidden ? t('Hidden from players: show') : t('Visible to players: hide'), () => { m(t('Visibility'), () => { s.hidden = !s.hidden; }); ed.refreshUI(); }, s.hidden ? 'warn' : ''),
     dup, del,
   );
 }
 
 function roomCard(ed: Editor, box: HTMLElement, r: Room, m: M, dup: HTMLElement, del: HTMLElement) {
   box.classList.add('card');
-  const name = h('input', { type: 'text', class: 'title-input', value: r.name || '', 'aria-label': 'Nome', oninput: () => m('Nome', () => { r.name = name.value; }, 'name') });
+  const name = h('input', { type: 'text', class: 'title-input', value: r.name || '', 'aria-label': t('Name'), oninput: () => m(t('Name'), () => { r.name = name.value; }, 'name') });
   box.append(cardHead(ed, name));
-  if (!r.zoneOnly) box.append(h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, 'Pavimento · ' + texName(r.floor)),
-    h('div', { class: 'swatches compact' }, ...FLOORS.map((f) => h('button', { class: 'swatch' + (f === r.floor ? ' on' : ''), title: texName(f), 'aria-label': texName(f), onclick: () => { m('Pavimento', () => { r.floor = f; }); ed.refreshUI(); } }, h('img', { src: texSwatch(f), alt: '' }))))));
+  if (!r.zoneOnly) box.append(h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, t('Floor · {name}', { name: texName(r.floor) })),
+    h('div', { class: 'swatches compact' }, ...FLOORS.map((f) => h('button', { class: 'swatch' + (f === r.floor ? ' on' : ''), title: texName(f), 'aria-label': texName(f), onclick: () => { m(t('Floor'), () => { r.floor = f; }); ed.refreshUI(); } }, h('img', { src: texSwatch(f), alt: '' }))))));
   box.append(
-    toggle('Solo zona nebbia (senza pavimento e muri)', !!r.zoneOnly, (v) => { m('Zona', () => { r.zoneOnly = v || undefined; }); ed.refreshUI(); }),
+    toggle(t('Fog zone only (no floor or walls)'), !!r.zoneOnly, (v) => { m(t('Zone'), () => { r.zoneOnly = v || undefined; }); ed.refreshUI(); }),
     h('div', { class: 'card-actions' }, dup, del));
 }
 
 function lightCard(ed: Editor, box: HTMLElement, l: Light, m: M, del: HTMLElement) {
   box.classList.add('card');
-  const col = h('input', { type: 'color', value: l.color, 'aria-label': 'Colore', oninput: () => m('Luce', () => { l.color = col.value; }, 'lc') });
-  box.append(cardHead(ed, 'Luce'),
-    miniSlider('Raggio', l.radius, 1, 20, 0.5, (v) => m('Luce', () => { l.radius = v; }, 'lr'), (v) => v + ' cas.'),
-    miniSlider('Intensità', l.intensity, 0.1, 1, 0.05, (v) => m('Luce', () => { l.intensity = v; }, 'li'), (v) => Math.round(v * 100) + '%'),
-    h('div', { class: 'card-row' }, h('label', { class: 'color-dot' }, col, h('span', null, 'Colore')), toggle('Tremolio', l.flicker, (v) => m('Luce', () => { l.flicker = v; }))),
+  const col = h('input', { type: 'color', value: l.color, 'aria-label': t('Color'), oninput: () => m(t('Light'), () => { l.color = col.value; }, 'lc') });
+  box.append(cardHead(ed, t('Light')),
+    miniSlider(t('Radius'), l.radius, 1, 20, 0.5, (v) => m(t('Light'), () => { l.radius = v; }, 'lr'), (v) => t('{n} sq.', { n: v })),
+    miniSlider(t('Intensity'), l.intensity, 0.1, 1, 0.05, (v) => m(t('Light'), () => { l.intensity = v; }, 'li'), (v) => Math.round(v * 100) + '%'),
+    h('div', { class: 'card-row' }, h('label', { class: 'color-dot' }, col, h('span', null, t('Color'))), toggle(t('Flicker'), l.flicker, (v) => m(t('Light'), () => { l.flicker = v; }))),
     h('div', { class: 'card-actions' }, del));
 }
 
 function labelCard(ed: Editor, box: HTMLElement, l: Label, m: M, dup: HTMLElement, del: HTMLElement) {
   box.classList.add('card');
-  const ta = h('textarea', { rows: 2, 'aria-label': 'Testo', oninput: () => m('Testo', () => { l.text = ta.value; }, 'text') });
+  const ta = h('textarea', { rows: 2, 'aria-label': t('Text'), oninput: () => m(t('Text'), () => { l.text = ta.value; }, 'text') });
   ta.value = l.text;
-  const col = h('input', { type: 'color', value: l.color, 'aria-label': 'Colore', oninput: () => m('Colore', () => { l.color = col.value; }, 'col') });
-  const str = h('input', { type: 'color', value: l.stroke, 'aria-label': 'Contorno', oninput: () => m('Colore', () => { l.stroke = str.value; }, 'str') });
-  box.append(cardHead(ed, 'Testo'), ta,
+  const col = h('input', { type: 'color', value: l.color, 'aria-label': t('Color'), oninput: () => m(t('Color'), () => { l.color = col.value; }, 'col') });
+  const str = h('input', { type: 'color', value: l.stroke, 'aria-label': t('Outline'), oninput: () => m(t('Color'), () => { l.stroke = str.value; }, 'str') });
+  box.append(cardHead(ed, t('Text')), ta,
     listPicker('Font', FONTS.map((f) => [f, f] as [string, string]), l.font, (v) => { m('Font', () => { l.font = v; }); ed.refreshUI(); }),
-    miniSlider('Dimensione', l.size, 10, 300, 2, (v) => m('Dimensione', () => { l.size = v; }, 'size')),
-    miniSlider('Rotazione', Math.round((l.rot * 180) / Math.PI), -180, 180, 1, (v) => m('Ruota', () => { l.rot = (v * Math.PI) / 180; }, 'rot'), (v) => v + '°'),
-    h('div', { class: 'card-row' }, h('label', { class: 'color-dot' }, col, h('span', null, 'Colore')), h('label', { class: 'color-dot' }, str, h('span', null, 'Contorno'))),
-    h('div', { class: 'card-row' }, toggle('Grassetto', !!l.bold, (v) => m('Stile', () => { l.bold = v; })), toggle('Corsivo', !!l.italic, (v) => m('Stile', () => { l.italic = v; }))),
-    toggle('Solo per me (nascosto ai giocatori)', !!l.hidden, (v) => m('Visibilità', () => { l.hidden = v; })),
+    miniSlider(t('Size'), l.size, 10, 300, 2, (v) => m(t('Size'), () => { l.size = v; }, 'size')),
+    miniSlider(t('Rotation'), Math.round((l.rot * 180) / Math.PI), -180, 180, 1, (v) => m(t('Rotate'), () => { l.rot = (v * Math.PI) / 180; }, 'rot'), (v) => v + '°'),
+    h('div', { class: 'card-row' }, h('label', { class: 'color-dot' }, col, h('span', null, t('Color'))), h('label', { class: 'color-dot' }, str, h('span', null, t('Outline')))),
+    h('div', { class: 'card-row' }, toggle(t('Bold'), !!l.bold, (v) => m(t('Style'), () => { l.bold = v; })), toggle(t('Italic'), !!l.italic, (v) => m(t('Style'), () => { l.italic = v; }))),
+    toggle(t('Only for me (hidden from players)'), !!l.hidden, (v) => m(t('Visibility'), () => { l.hidden = v; })),
     h('div', { class: 'card-actions' }, dup, del));
 }
 
 function markerCard(ed: Editor, box: HTMLElement, mk: Marker, m: M, del: HTMLElement) {
   box.classList.add('card', 'wide');
   const linked = mk.link ? ed.maps.find((x) => x.id === mk.link) : null;
-  const vis = toggle('Visibile ai giocatori', mk.visible, (v) => { m('Visibilità', () => { mk.visible = v; }); });
+  const vis = toggle(t('Visible to players'), mk.visible, (v) => { m(t('Visibility'), () => { mk.visible = v; }); });
   if (ed.mode === 'session') {
-    box.append(cardHead(ed, h('strong', null, mk.icon + '  ' + (mk.title || 'Segnaposto'))),
-      h('div', { class: 'notes' + (mk.notes ? '' : ' muted') }, mk.notes || 'Nessuna nota.'),
-      mk.playerNotes ? h('div', { class: 'notes player' }, h('small', null, 'Per i giocatori'), mk.playerNotes) : '',
+    box.append(cardHead(ed, h('strong', null, mk.icon + '  ' + (mk.title || t('Marker')))),
+      h('div', { class: 'notes' + (mk.notes ? '' : ' muted') }, mk.notes || t('No notes.')),
+      mk.playerNotes ? h('div', { class: 'notes player' }, h('small', null, t('For players')), mk.playerNotes) : '',
       vis,
-      linked ? h('button', { class: 'btn-primary', onclick: () => ed.openMap(linked.id) }, icon('arrowRight', 16), 'Apri ' + linked.name) : '');
+      linked ? h('button', { class: 'btn-primary', onclick: () => ed.openMap(linked.id) }, icon('arrowRight', 16), t('Open {name}', { name: linked.name })) : '');
     return;
   }
-  const title = h('input', { type: 'text', class: 'title-input', value: mk.title, 'aria-label': 'Titolo', oninput: () => m('Titolo', () => { mk.title = title.value; }, 'title') });
-  const notes = h('textarea', { rows: 5, placeholder: 'Note segrete: PNG, tesori, trappole…', 'aria-label': 'Note del DM', oninput: () => m('Note', () => { mk.notes = notes.value; }, 'notes') });
+  const title = h('input', { type: 'text', class: 'title-input', value: mk.title, 'aria-label': t('Title'), oninput: () => m(t('Title'), () => { mk.title = title.value; }, 'title') });
+  const notes = h('textarea', { rows: 5, placeholder: t('Secret notes: NPCs, treasure, traps…'), 'aria-label': t('DM notes'), oninput: () => m(t('Notes'), () => { mk.notes = notes.value; }, 'notes') });
   notes.value = mk.notes;
-  const pn = h('textarea', { rows: 2, placeholder: 'Quello che vedono i giocatori cliccando', 'aria-label': 'Testo per i giocatori', oninput: () => m('Note', () => { mk.playerNotes = pn.value; }, 'pnotes') });
+  const pn = h('textarea', { rows: 2, placeholder: t('What players see when they click'), 'aria-label': t('Player text'), oninput: () => m(t('Notes'), () => { mk.playerNotes = pn.value; }, 'pnotes') });
   pn.value = mk.playerNotes;
-  const ib: HTMLButtonElement = h('button', { class: 'emoji-btn', 'aria-label': 'Cambia icona', onclick: () => popover(ib, h('div', { class: 'pop-body' },
-    h('div', { class: 'icons' }, ...MARKER_ICONS.map((i) => h('button', { class: i === mk.icon ? 'on' : '', onclick: () => { m('Icona', () => { mk.icon = i; }); closePopover(); ed.refreshUI(); } }, i)))), 'below') }, mk.icon);
+  const ib: HTMLButtonElement = h('button', { class: 'emoji-btn', 'aria-label': t('Change icon'), onclick: () => popover(ib, h('div', { class: 'pop-body' },
+    h('div', { class: 'icons' }, ...MARKER_ICONS.map((i) => h('button', { class: i === mk.icon ? 'on' : '', onclick: () => { m(t('Icon'), () => { mk.icon = i; }); closePopover(); ed.refreshUI(); } }, i)))), 'below') }, mk.icon);
   const others = ed.maps.filter((x) => x.id !== ed.rt.doc.id);
   box.append(cardHead(ed, h('div', { class: 'title-row' }, ib, title)),
-    h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, 'Note del DM'), notes),
-    h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, 'Per i giocatori'), pn),
+    h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, t('DM notes')), notes),
+    h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, t('For players')), pn),
     vis,
-    listPicker('Collega a mappa', [['', '— nessuna —'], ...others.map((x) => [x.id, x.name] as [string, string])], mk.link || '', (v) => { m('Collegamento', () => { mk.link = v || undefined; }); ed.refreshUI(); }),
-    h('div', { class: 'card-actions' }, linked ? h('button', { class: 'chip-btn', onclick: () => ed.openMap(linked.id) }, 'Apri mappa collegata') : '', del));
+    listPicker(t('Link to map'), [['', '— nessuna —'], ...others.map((x) => [x.id, x.name] as [string, string])], mk.link || '', (v) => { m(t('Link'), () => { mk.link = v || undefined; }); ed.refreshUI(); }),
+    h('div', { class: 'card-actions' }, linked ? h('button', { class: 'chip-btn', onclick: () => ed.openMap(linked.id) }, t('Open linked map')) : '', del));
 }
 
-function tokenCard(ed: Editor, box: HTMLElement, t: Token, m: M, del: HTMLElement) {
+function tokenCard(ed: Editor, box: HTMLElement, tok: Token, m: M, del: HTMLElement) {
   box.classList.add('card');
   const session = ed.mode === 'session';
   const rr = () => ed.refreshUI();
-  const img = t.image ? assets.urls.get(t.image) : null;
-  const avatar = h('span', { class: 'avatar', style: { background: t.color, borderColor: TOKEN_KIND_COLORS[t.kind] } },
-    img ? h('img', { src: img, alt: '' }) : t.name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase());
+  const img = tok.image ? assets.urls.get(tok.image) : null;
+  const avatar = h('span', { class: 'avatar', style: { background: tok.color, borderColor: TOKEN_KIND_COLORS[tok.kind] } },
+    img ? h('img', { src: img, alt: '' }) : tok.name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase());
   const titleEl = session
-    ? h('div', { class: 'tok-title' }, h('strong', null, t.name), h('small', null, `${TOKEN_KIND_NAMES[t.kind]} · ${TOKEN_SIZE_NAMES[t.size]} · CA ${t.ac}`))
-    : (() => { const i = h('input', { type: 'text', class: 'title-input', value: t.name, 'aria-label': 'Nome', oninput: () => m('Nome', () => { t.name = i.value; }, 'name') }); return h('div', { class: 'tok-title' }, i); })();
+    ? h('div', { class: 'tok-title' }, h('strong', null, tok.name), h('small', null, `${TOKEN_KIND_NAMES[tok.kind]} · ${TOKEN_SIZE_NAMES[tok.size]} · ${t('AC')} ${tok.ac}`))
+    : (() => { const i = h('input', { type: 'text', class: 'title-input', value: tok.name, 'aria-label': t('Name'), oninput: () => m(t('Name'), () => { tok.name = i.value; }, 'name') }); return h('div', { class: 'tok-title' }, i); })();
   box.append(cardHead(ed, h('div', { class: 'title-row' }, avatar, titleEl),
-    iconBtn(t.hidden ? 'eyeOff' : 'eye', t.hidden ? 'Nascosta ai giocatori: mostra' : 'Visibile ai giocatori: nascondi', () => { m('Visibilità', () => { t.hidden = !t.hidden; }); rr(); }, t.hidden ? 'warn' : '')));
+    iconBtn(tok.hidden ? 'eyeOff' : 'eye', tok.hidden ? t('Token hidden from players: show') : t('Visible to players: hide'), () => { m(t('Visibility'), () => { tok.hidden = !tok.hidden; }); rr(); }, tok.hidden ? 'warn' : '')));
   // hit points
-  const f = t.maxHp ? Math.max(0, Math.min(1, t.hp / t.maxHp)) : 0;
-  const amt = h('input', { type: 'number', min: 0, value: ed.ui.hpAmt, class: 'hp-amt', 'aria-label': 'Quantità', oninput: () => { ed.ui.hpAmt = Math.max(0, +amt.value || 0); } });
-  const apply = (sign: number) => { const v = ed.ui.hpAmt; if (!v) return; m(sign < 0 ? 'Danno' : 'Cura', () => { t.hp = Math.min(t.maxHp, Math.max(-t.maxHp, t.hp + sign * v)); }); rr(); };
-  const maxIn = h('input', { type: 'number', value: t.maxHp, class: 'num-sm', 'aria-label': 'PF massimi', onchange: () => { m('PF max', () => { t.maxHp = Math.max(0, +maxIn.value || 0); t.hp = Math.min(t.hp, t.maxHp); }); rr(); } });
+  const f = tok.maxHp ? Math.max(0, Math.min(1, tok.hp / tok.maxHp)) : 0;
+  const amt = h('input', { type: 'number', min: 0, value: ed.ui.hpAmt, class: 'hp-amt', 'aria-label': t('Amount'), oninput: () => { ed.ui.hpAmt = Math.max(0, +amt.value || 0); } });
+  const apply = (sign: number) => { const v = ed.ui.hpAmt; if (!v) return; m(sign < 0 ? t('Damage') : t('Heal'), () => { tok.hp = Math.min(tok.maxHp, Math.max(-tok.maxHp, tok.hp + sign * v)); }); rr(); };
+  const maxIn = h('input', { type: 'number', value: tok.maxHp, class: 'num-sm', 'aria-label': t('Max HP'), onchange: () => { m(t('Max HP'), () => { tok.maxHp = Math.max(0, +maxIn.value || 0); tok.hp = Math.min(tok.hp, tok.maxHp); }); rr(); } });
   box.append(h('div', { class: 'card-sec' },
-    h('div', { class: 'hp-top' }, h('span', { class: 'card-label' }, 'Punti ferita', h('em', null, hpStatus(t))),
-      session ? h('span', { class: 'hp-num' }, h('b', null, String(t.hp)), ' / ' + t.maxHp) : h('span', { class: 'hp-num' }, h('b', null, String(t.hp)), ' / ', maxIn)),
+    h('div', { class: 'hp-top' }, h('span', { class: 'card-label' }, t('Hit points'), h('em', null, hpStatus(tok))),
+      session ? h('span', { class: 'hp-num' }, h('b', null, String(tok.hp)), ' / ' + tok.maxHp) : h('span', { class: 'hp-num' }, h('b', null, String(tok.hp)), ' / ', maxIn)),
     h('div', { class: 'hpbar' }, h('div', { style: { width: f * 100 + '%', background: f > 0.5 ? '#5CC28A' : f > 0.25 ? '#E0B030' : '#E26A5F' } })),
-    h('div', { class: 'hp-actions' }, h('button', { class: 'dmg', onclick: () => apply(-1) }, 'Danno'), amt, h('button', { class: 'heal', onclick: () => apply(1) }, 'Cura'))));
+    h('div', { class: 'hp-actions' }, h('button', { class: 'dmg', onclick: () => apply(-1) }, t('Damage')), amt, h('button', { class: 'heal', onclick: () => apply(1) }, t('Heal')))));
   // conditions
-  const condSet = new Set(t.conditions);
-  const toggleCond = (c: string) => { m('Condizione', () => { t.conditions = condSet.has(c) ? t.conditions.filter((x) => x !== c) : [...t.conditions, c]; }); rr(); };
-  const add: HTMLButtonElement = h('button', { class: 'cond add', onclick: () => popover(add, h('div', { class: 'pop-body' }, h('div', { class: 'pop-title' }, 'Condizioni'),
-    h('div', { class: 'cond-grid' }, ...CONDITIONS.map((c) => h('button', { class: 'cond' + (condSet.has(c.id) ? ' on' : ''), onclick: () => { closePopover(); toggleCond(c.id); } }, c.icon + ' ' + c.name)))), 'below') }, '+ Aggiungi');
-  box.append(h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, 'Condizioni'),
-    h('div', { class: 'cond-row' }, ...t.conditions.map((c) => { const d = CONDITIONS.find((x) => x.id === c); return h('button', { class: 'cond on', title: 'Rimuovi', onclick: () => toggleCond(c) }, (d ? d.icon + ' ' + d.name : c) + ' ×'); }), add)));
+  const condSet = new Set(tok.conditions);
+  const toggleCond = (c: string) => { m(t('Condition'), () => { tok.conditions = condSet.has(c) ? tok.conditions.filter((x) => x !== c) : [...tok.conditions, c]; }); rr(); };
+  const add: HTMLButtonElement = h('button', { class: 'cond add', onclick: () => popover(add, h('div', { class: 'pop-body' }, h('div', { class: 'pop-title' }, t('Conditions')),
+    h('div', { class: 'cond-grid' }, ...CONDITIONS.map((c) => h('button', { class: 'cond' + (condSet.has(c.id) ? ' on' : ''), onclick: () => { closePopover(); toggleCond(c.id); } }, c.icon + ' ' + c.name)))), 'below') }, t('+ Add'));
+  box.append(h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, t('Conditions')),
+    h('div', { class: 'cond-row' }, ...tok.conditions.map((c) => { const d = CONDITIONS.find((x) => x.id === c); return h('button', { class: 'cond on', title: t('Remove'), onclick: () => toggleCond(c) }, (d ? d.icon + ' ' + d.name : c) + ' ×'); }), add)));
   if (!session) {
-    const ac = h('input', { type: 'number', value: t.ac, class: 'num-sm', 'aria-label': 'CA', onchange: () => m('CA', () => { t.ac = +ac.value || 0; }) });
-    const im = h('input', { type: 'number', value: t.initMod, class: 'num-sm', 'aria-label': 'Modificatore iniziativa', onchange: () => m('Iniziativa', () => { t.initMod = +im.value || 0; }) });
+    const ac = h('input', { type: 'number', value: tok.ac, class: 'num-sm', 'aria-label': t('AC'), onchange: () => m(t('AC'), () => { tok.ac = +ac.value || 0; }) });
+    const im = h('input', { type: 'number', value: tok.initMod, class: 'num-sm', 'aria-label': t('Initiative modifier'), onchange: () => m(t('Initiative'), () => { tok.initMod = +im.value || 0; }) });
     box.append(
       h('div', { class: 'card-row' },
-        listPicker('Tipo', Object.entries(TOKEN_KIND_NAMES) as [TokenKind, string][], t.kind, (v) => { m('Tipo', () => { t.kind = v; t.color = TOKEN_KIND_COLORS[v]; }); rr(); }),
-        listPicker('Taglia', Object.entries(TOKEN_SIZE_NAMES) as [TokenSize, string][], t.size, (v) => { m('Taglia', () => { t.size = v; ed.snapToken(t); }); rr(); })),
-      h('div', { class: 'card-row' }, h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, 'CA'), ac), h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, 'Mod. iniziativa'), im)),
-      h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, 'Ritratto'),
+        listPicker(t('Type'), Object.entries(TOKEN_KIND_NAMES) as [TokenKind, string][], tok.kind, (v) => { m(t('Type'), () => { tok.kind = v; tok.color = TOKEN_KIND_COLORS[v]; }); rr(); }),
+        listPicker(t('Creature size'), Object.entries(TOKEN_SIZE_NAMES) as [TokenSize, string][], tok.size, (v) => { m(t('Creature size'), () => { tok.size = v; ed.snapToken(tok); }); rr(); })),
+      h('div', { class: 'card-row' }, h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, t('AC')), ac), h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, t('Init. mod.')), im)),
+      h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, t('Portrait')),
         h('div', { class: 'token-imgs' },
-          h('button', { class: !t.image ? 'on' : '', onclick: () => { m('Immagine', () => { t.image = undefined; }); rr(); }, title: 'Iniziali' }, 'Aa'),
-          ...assets.list('token').map((a) => h('button', { class: t.image === a.id ? 'on' : '', title: a.name, onclick: () => { m('Immagine', () => { t.image = a.id; }); rr(); } }, h('img', { src: assets.urls.get(a.id), alt: '' }))),
-          h('button', { title: 'Importa ritratto', onclick: async () => { const fs = await pickFile('image/*'); if (fs[0]) { const r = await assets.add(fs[0], fs[0].name, 'token'); m('Immagine', () => { t.image = r.id; }); rr(); } } }, '+'))));
+          h('button', { class: !tok.image ? 'on' : '', onclick: () => { m(t('Image'), () => { tok.image = undefined; }); rr(); }, title: t('Initials') }, 'Aa'),
+          ...assets.list('token').map((a) => h('button', { class: tok.image === a.id ? 'on' : '', title: a.name, onclick: () => { m(t('Image'), () => { tok.image = a.id; }); rr(); } }, h('img', { src: assets.urls.get(a.id), alt: '' }))),
+          h('button', { title: t('Import portrait'), onclick: async () => { const fs = await pickFile('image/*'); if (fs[0]) { const r = await assets.add(fs[0], fs[0].name, 'token'); m(t('Image'), () => { tok.image = r.id; }); rr(); } } }, '+'))));
   }
-  const inCombat = ed.rt.doc.combat.members.includes(t.id);
+  const inCombat = ed.rt.doc.combat.members.includes(tok.id);
   box.append(h('div', { class: 'card-actions' },
-    !inCombat ? h('button', { class: 'chip-btn', onclick: () => { m('Combattimento', () => { ed.rt.doc.combat.members.push(t.id); ed.sortCombat(); }); rr(); } }, '+ Combattimento') : '',
+    !inCombat ? h('button', { class: 'chip-btn', onclick: () => { m(t('Combat'), () => { ed.rt.doc.combat.members.push(tok.id); ed.sortCombat(); }); rr(); } }, t('+ Combat')) : '',
     del));
 }
 
