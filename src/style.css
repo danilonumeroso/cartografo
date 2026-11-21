@@ -440,8 +440,12 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .gen-layouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .gen-layouts button { padding: 0 6px; }
 
-.parent-btn { height: 32px; margin-left: 6px; }
-.parent-btn[hidden] { display: none; }
+.crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.crumbs[hidden] { display: none; }
+.crumb { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 8px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); font-size: 13px; max-width: 160px; }
+.crumb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb:hover { background: var(--raise); color: var(--text); }
+.crumb-sep { color: var(--dim); font-size: 16px; padding: 0 1px; }
 .tb-group { display: inline-flex; align-items: center; gap: 4px; }
 .btn-sm { height: 32px; padding: 0 10px; font-size: 13px; }
 .pop-note { margin-left: auto; color: var(--gold-hi); font-size: 11px; }
@@ -454,3 +458,10 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .kind-tag { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(15,17,22,.82); color: #e8d9b0; border: 1px solid rgba(232,184,74,.45); }
 .kind-tag.city { color: #f0c9a8; border-color: rgba(214,120,80,.5); }
 .home-parent { display: inline-flex; align-items: center; gap: 4px; color: var(--accent, #e8b84a) !important; }
+.crumbs { flex-shrink: 1; overflow: hidden; }
+.map-switch { flex-shrink: 0; max-width: 260px; }
+@media (max-width: 1320px) { .topbar .brand-name { display: none; } .crumb { max-width: 120px; } }
+/* narrow screens: farther ancestors shrink to their icon, the nearest keeps its name */
+@media (max-width: 1180px) { .crumb:not(.parent-btn) .crumb-name { display: none; } .map-switch { max-width: 200px; } }
+.crumb, .crumb svg { flex: none; }
+.crumb.parent-btn { flex: 0 1 auto; min-width: 0; }

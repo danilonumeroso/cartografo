@@ -103,7 +103,8 @@ test('a place on the world map gets its own linked battle map', async ({ page })
   expect(child.kind).toBe('battle');
   expect(child.parent).toBe(world.id);
   expect(child.rooms.length).toBeGreaterThan(0);
-  await expect(page.locator('.parent-btn')).toHaveText(`Back to ${world.name}`);
+  await expect(page.locator('.parent-btn')).toHaveText(world.name);
+  await expect(page.locator('.parent-btn')).toHaveAttribute('title', `Back to ${world.name}`);
   await page.locator('.parent-btn').click();
   await page.waitForFunction((id) => window.editor.rt.doc.id === id, world.id);
   expect((await doc(page)).stamps.find((s) => s.id === town.id)!.link).toBe(child.id);

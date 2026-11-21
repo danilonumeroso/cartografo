@@ -37,8 +37,8 @@ export function buildTopbar(ed: Editor): HTMLElement {
     h('div', { class: 'top-left' },
       h('button', { class: 'brand', title: t('Your maps'), onclick: () => ed.showHome() }, h('span', { class: 'brand-mark' }, icon('swords', 16)), h('span', { class: 'brand-name' }, 'Cartografo')),
       h('span', { class: 'top-sep' }),
-      h('button', { class: 'map-switch', title: t('Your maps'), onclick: () => ed.showHome() }, u.mapThumb, u.mapName, icon('chevron', 14)),
-      u.parent = h('button', { class: 'chip-btn parent-btn', hidden: true })),
+      u.parent = h('nav', { class: 'crumbs', 'aria-label': t('Linked maps'), hidden: true }),
+      h('button', { class: 'map-switch', title: t('Your maps'), onclick: () => ed.showHome() }, u.mapThumb, u.mapName, icon('chevron', 14))),
     u.modeSeg,
     h('div', { class: 'top-right' }, u.undo, u.redo, h('span', { class: 'top-sep' }), u.tv, more));
 }
@@ -47,9 +47,19 @@ export function updateTopbar(ed: Editor) {
   const u = ed.el;
   if (!ed.rt) return;
   u.mapName.textContent = ed.rt.doc.name;
-  const parent = ed.rt.doc.parent ? ed.maps.find((m) => m.id === ed.rt.doc.parent) : null;
-  u.parent.hidden = !parent;
-  if (parent) { u.parent.replaceChildren(icon('arrowLeft', 14), t('Back to {name}', { name: parent.name })); u.parent.onclick = () => ed.openMap(parent.id); }
+  // breadcrumb of the maps this one lives inside (world › city › …), nearest last
+  const chain: typeof ed.maps = [];
+  for (let id = ed.rt.doc.parent; id && chain.length < 4;) {
+    const m = ed.maps.find((x) => x.id === id);
+    if (!m || m.id === ed.rt.doc.id || chain.includes(m)) break;
+    chain.unshift(m); id = m.parent;
+  }
+  u.parent.hidden = !chain.length;
+  u.parent.replaceChildren(...chain.flatMap((m, i) => [
+    h('button', { class: 'crumb' + (i === chain.length - 1 ? ' parent-btn' : ''), title: t('Back to {name}', { name: m.name }), onclick: () => ed.openMap(m.id) },
+      icon(m.kind === 'world' ? 'map' : m.kind === 'city' ? 'roomRect' : 'swords', 13), h('span', { class: 'crumb-name' }, m.name)),
+    h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '›'),
+  ]));
   const meta = ed.maps.find((m) => m.id === ed.rt.doc.id);
   if (meta?.thumb) { (u.mapThumb as HTMLImageElement).src = meta.thumb; u.mapThumb.hidden = false; }
   else u.mapThumb.hidden = true;

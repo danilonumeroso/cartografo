@@ -1186,4 +1186,5 @@ export const IT: Record<string, string> = {
   "Worlds and cities": "Mondi e città",
   "The big picture: link places and buildings to their battle maps": "Il quadro d'insieme: collega luoghi ed edifici alle loro mappe di battaglia",
   "inside {name}": "dentro {name}",
+  "Linked maps": "Mappe collegate",
 };
