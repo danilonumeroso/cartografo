@@ -11,7 +11,7 @@ import { hexCenter } from './util';
 import { buildingName, placeName } from './places';
 import { History } from './history';
 import {
-  Building, BuildingKind, RoofStyle, newCityDoc,
+  Building, BuildingKind, MapKind, RoofStyle, newCityDoc,
   CELL, Combat, MIN_SIZE, DoorKind, PathKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, newWorldDoc, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
 } from './model';
 import { buildTopbar, buildZoom, Intent, renderDock, renderRail, TOOL_INTENT, updateTopbar } from './ui/chrome';
@@ -56,7 +56,7 @@ export const SESSION_TOOLS: { id: Tool; name: string; key: string }[] = [
   { id: 'marker', name: t('Marker'), key: 'M' },
 ];
 
-export interface MapMeta { id: string; name: string; updatedAt: number; cols: number; rows: number; thumb?: string }
+export interface MapMeta { id: string; name: string; updatedAt: number; cols: number; rows: number; thumb?: string; kind: MapKind; parent?: string }
 
 export class Editor {
   root: HTMLElement;
@@ -185,7 +185,7 @@ export class Editor {
   async refreshMaps() {
     const all = await listMaps();
     this.maps.forEach((m) => m.thumb && URL.revokeObjectURL(m.thumb));
-    this.maps = all.sort((a, b) => b.updatedAt - a.updatedAt).map((m) => ({ id: m.id, name: m.name, updatedAt: m.updatedAt, cols: m.doc.cols, rows: m.doc.rows, thumb: m.thumb ? URL.createObjectURL(m.thumb) : undefined }));
+    this.maps = all.sort((a, b) => b.updatedAt - a.updatedAt).map((m) => ({ id: m.id, name: m.name, updatedAt: m.updatedAt, cols: m.doc.cols, rows: m.doc.rows, kind: m.doc.kind ?? 'battle', parent: m.doc.parent, thumb: m.thumb ? URL.createObjectURL(m.thumb) : undefined }));
   }
 
   async openMap(id: string) {
@@ -347,7 +347,7 @@ export class Editor {
         if (this.discarded || this.rt !== rt) { this.setSaveStatus('saved'); return; }
         await putMap(rec);
         let meta = this.maps.find((m) => m.id === rec.id);
-        if (!meta) { meta = { id: rec.id, name: rec.name, updatedAt: rec.updatedAt, cols: rec.doc.cols, rows: rec.doc.rows }; this.maps.unshift(meta); }
+        if (!meta) { meta = { id: rec.id, name: rec.name, updatedAt: rec.updatedAt, cols: rec.doc.cols, rows: rec.doc.rows, kind: rec.doc.kind ?? 'battle', parent: rec.doc.parent }; this.maps.unshift(meta); }
         meta.name = rec.name; meta.updatedAt = rec.updatedAt; meta.cols = rec.doc.cols; meta.rows = rec.doc.rows;
         if (meta.thumb) URL.revokeObjectURL(meta.thumb);
         meta.thumb = URL.createObjectURL(thumb);

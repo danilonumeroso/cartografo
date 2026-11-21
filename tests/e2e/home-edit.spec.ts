@@ -3,7 +3,7 @@ import { alpha, button, clickMap, doc, drag, empty, home, menu, room } from './h
 
 test('Home lists templates, size presets and empty backgrounds', async ({ page }) => {
   await home(page);
-  await expect(page.locator('.tpl strong')).toHaveText(['Dungeon', 'Cave', 'Forest', 'Tavern', 'Winter forest', 'World', 'City', 'Empty']);
+  await expect(page.locator('.tpl strong')).toHaveText(['Dungeon', 'Cave', 'Forest', 'Tavern', 'Winter forest', 'Empty', 'World', 'City']);
   await expect(page.getByRole('group', { name: 'Size' }).locator('button')).toHaveText(['Small 20×15', 'Medium 30×22', 'Large 40×30']);
   await expect(page.getByText(/No maps yet/)).toBeVisible();
   await button(page, 'Large 40×30').click();

@@ -13,9 +13,12 @@ const TEMPLATES = [
   { id: 'forest', name: t('Forest'), desc: t('Clearing, trail, camp'), img: 'templates/forest.jpg' },
   { id: 'tavern', name: t('Tavern'), desc: t('Hall, kitchen, street'), img: 'templates/tavern.jpg' },
   { id: 'winter', name: t('Winter forest'), desc: t('Snowy pines, frozen stream, festive camp'), img: 'templates/winter.jpg' },
+];
+const BIG = [
   { id: 'world', name: t('World'), desc: t('Continents, kingdoms, rivers, roads'), img: 'templates/world.jpg' },
   { id: 'city', name: t('City'), desc: t('Streets, roofs, walls, taverns'), img: 'templates/city.jpg' },
 ];
+const KIND_TAG: Record<string, () => string> = { world: () => t('World'), city: () => t('City') };
 const SIZES: [string, number, number][] = [[t('Small'), 20, 15], [t('Medium'), 30, 22], [t('Large'), 40, 30]];
 
 let size = 1;
@@ -56,12 +59,16 @@ function render(ed: Editor) {
     if (!list.length) grid.append(h('p', { class: 'hint' }, ed.maps.length ? t('No maps found.') : t('No maps yet: pick a template above.')));
     list.forEach((m, i) => {
       const current = ed.rt?.doc.id === m.id;
+      const parent = m.parent ? ed.maps.find((x) => x.id === m.parent) : null;
       grid.append(h('div', { class: 'home-card' + (current ? ' current' : '') },
         h('button', { class: 'home-thumb', onclick: async () => { hideHome(ed); if (!current) await ed.openMap(m.id); } },
           m.thumb ? h('img', { src: m.thumb, alt: '' }) : icon('map', 40),
-          current ? h('span', { class: 'badge' }, t('Open')) : i === 0 ? h('span', { class: 'badge' }, t('Continue')) : ''),
+          current ? h('span', { class: 'badge' }, t('Open')) : i === 0 ? h('span', { class: 'badge' }, t('Continue')) : '',
+          KIND_TAG[m.kind] ? h('span', { class: 'kind-tag ' + m.kind }, icon(m.kind === 'world' ? 'map' : 'roomRect', 12), KIND_TAG[m.kind]()) : ''),
         h('div', { class: 'home-meta' },
-          h('div', { class: 'home-meta-text' }, h('strong', null, m.name), h('small', null, `${m.cols}×${m.rows} · ${rel(m.updatedAt)}`)),
+          h('div', { class: 'home-meta-text' }, h('strong', null, m.name),
+            parent ? h('small', { class: 'home-parent' }, icon('arrowLeft', 11), t('inside {name}', { name: parent.name })) : '',
+            h('small', null, `${m.cols}×${m.rows} · ${rel(m.updatedAt)}`)),
           iconBtn('copy', t('Duplicate'), async () => { await import('./menus').then((x) => x.duplicateMap(m.id)); await ed.refreshMaps(); render(ed); }),
           !current ? iconBtn('trash', t('Delete'), async () => { if (!confirm(t('Delete “{name}”?', { name: m.name }))) return; const s = await import('../storage'); await s.deleteMap(m.id); await ed.refreshMaps(); render(ed); }, 'danger') : '')));
     });
@@ -77,6 +84,21 @@ function render(ed: Editor) {
         h('button', { onclick: () => { closePopover(); create('outdoor', t('Outdoor')); } }, t('Grass (outdoor)')),
         h('button', { onclick: () => { closePopover(); create('interior', t('Indoor')); } }, t('Wood (indoor)')))), 'below'));
   } }, h('span', { class: 'tpl-img grid-bg' }, icon('plus', 32)), h('span', { class: 'tpl-text' }, h('strong', null, t('Empty')), h('small', null, t('Rock, grass or wood'))));
+  const card = (tp: { id: string; name: string; desc: string; img: string }) => h('button', {
+    class: 'tpl', onclick: () => (tp.id === 'dungeon' ? showGenerator(ed, 'new', size) : tp.id === 'world' ? showWorldGenerator(ed, 'new', size) : tp.id === 'city' ? showCityGenerator(ed, 'new', size) : create(tp.id, tp.name)),
+  }, h('img', { class: 'tpl-img', src: BASE + tp.img, alt: '' }), h('span', { class: 'tpl-text' }, h('strong', null, tp.name), h('small', null, tp.desc)));
+  const fresh = h('section', { class: 'home-sec' },
+    h('div', { class: 'home-sec-head' },
+      h('div', null, h(ed.maps.length ? 'h2' : 'h1', null, t('New map')), h('p', null, t('Pick a starting point: a generator gives you a complete map to polish.'))),
+      sizeSeg),
+    h('h3', { class: 'tpl-group' }, t('Battle maps'), h('small', null, t('One square is 5 feet: rooms, caves, clearings'))),
+    h('div', { class: 'tpl-grid' }, ...TEMPLATES.map(card), empty),
+    h('h3', { class: 'tpl-group' }, t('Worlds and cities'), h('small', null, t('The big picture: link places and buildings to their battle maps'))),
+    h('div', { class: 'tpl-grid big' }, ...BIG.map(card)));
+  // returning users see their maps first; the very first visit starts from the templates
+  const mine = h('section', { class: 'home-sec' },
+    h('div', { class: 'home-sec-head' }, h(ed.maps.length ? 'h1' : 'h2', null, t('Your maps')), h('label', { class: 'search' }, icon('search', 16), q)),
+    grid);
   el.append(
     h('header', { class: 'home-top' },
       h('span', { class: 'brand' }, h('span', { class: 'brand-mark' }, icon('swords', 16)), h('span', { class: 'brand-name' }, 'Cartografo')),
@@ -84,18 +106,6 @@ function render(ed: Editor) {
       h('button', { class: 'chip-btn', onclick: () => import('./menus').then((x) => x.importFile(ed)) }, icon('download', 16), t('Import')),
       h('button', { class: 'chip-btn', onclick: () => import('./menus').then((x) => x.backupAll(ed)) }, icon('upload', 16), 'Backup'),
       ed.rt ? h('button', { class: 'chip-btn', onclick: () => hideHome(ed) }, icon('x', 16), t('Back to map')) : ''),
-    h('main', { class: 'home-main' },
-      h('section', { class: 'home-sec' },
-        h('div', { class: 'home-sec-head' },
-          h('div', null, h('h1', null, t('New map')), h('p', null, t('Pick a starting point: a generator gives you a complete map to polish.'))),
-          sizeSeg),
-        h('div', { class: 'tpl-grid' },
-          ...TEMPLATES.map((t) => h('button', { class: 'tpl', onclick: () => (t.id === 'dungeon' ? showGenerator(ed, 'new', size) : t.id === 'world' ? showWorldGenerator(ed, 'new', size) : t.id === 'city' ? showCityGenerator(ed, 'new', size) : create(t.id, t.name)) },
-            h('img', { class: 'tpl-img', src: BASE + t.img, alt: '' }),
-            h('span', { class: 'tpl-text' }, h('strong', null, t.name), h('small', null, t.desc)))),
-          empty)),
-      h('section', { class: 'home-sec' },
-        h('div', { class: 'home-sec-head' }, h('h2', null, t('Your maps')), h('label', { class: 'search' }, icon('search', 16), q)),
-        grid)));
+    h('main', { class: 'home-main' }, ...(ed.maps.length ? [mine, fresh] : [fresh, mine])));
   fill();
 }

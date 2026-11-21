@@ -54,7 +54,7 @@ export function renderDrawer(ed: Editor) {
     type: 'text', value: u.search, placeholder: worldMode ? t('Search: mountain, castle, ship…') : t('Search: barrel, torch, tree…'), 'aria-label': t('Search props'),
     oninput: () => { u.search = search.value; fillGrid(); },
   });
-  const cats = h('div', { class: 'chips lib-cats', onwheel: (e: WheelEvent) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { cats.scrollLeft += e.deltaY; e.preventDefault(); } } },
+  const cats = h('div', { class: 'chips lib-cats' },
     ...catList.filter((c) => c !== 'recent' || recent().length).map((c) => h('button', {
       class: 'chip' + (c === u.stampCat && !u.search ? ' on' : ''), 'aria-pressed': String(c === u.stampCat && !u.search), 'aria-label': catLabel(c), title: catLabel(c),
       onclick: () => { u.stampCat = c; u.search = ''; ed.refreshUI(); },

@@ -167,8 +167,9 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .drawer[hidden] { display: none; }
 .lib-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .lib-head .lib-opts { margin-left: auto; }
-.lib-cats { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; padding-bottom: 4px; margin: -4px 0 -6px; scroll-behavior: smooth; }
-.lib-cats .chip { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+/* every category stays visible: compact chips that wrap instead of a hidden horizontal scroll */
+.lib-cats { flex-wrap: wrap; gap: 5px; }
+.lib-cats .chip { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 28px; padding: 0 10px; font-size: 12.5px; }
 .chip-ico { font-size: 14px; line-height: 1; }
 .chip-n { font-size: 10.5px; color: var(--muted); opacity: .8; font-weight: 500; }
 .chip.on .chip-n { color: var(--accent-hi); }
@@ -444,3 +445,12 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .tb-group { display: inline-flex; align-items: center; gap: 4px; }
 .btn-sm { height: 32px; padding: 0 10px; font-size: 13px; }
 .pop-note { margin-left: auto; color: var(--gold-hi); font-size: 11px; }
+
+/* home: template groups and map kinds */
+.tpl-group { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.tpl-group small { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 12px; opacity: .8; }
+.tpl-grid.big { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.tpl-grid.big .tpl-img { aspect-ratio: 16 / 7; }
+.kind-tag { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(15,17,22,.82); color: #e8d9b0; border: 1px solid rgba(232,184,74,.45); }
+.kind-tag.city { color: #f0c9a8; border-color: rgba(214,120,80,.5); }
+.home-parent { display: inline-flex; align-items: center; gap: 4px; color: var(--accent, #e8b84a) !important; }

@@ -1181,4 +1181,9 @@ export const IT: Record<string, string> = {
   "Worn flagstones": "Lastre consumate",
   "Dark stone tiles": "Piastrelle di pietra scura",
   "Worn planks": "Assi consumate",
+  "Battle maps": "Mappe di battaglia",
+  "One square is 5 feet: rooms, caves, clearings": "Un quadretto è 1,5 metri: stanze, caverne, radure",
+  "Worlds and cities": "Mondi e città",
+  "The big picture: link places and buildings to their battle maps": "Il quadro d'insieme: collega luoghi ed edifici alle loro mappe di battaglia",
+  "inside {name}": "dentro {name}",
 };
