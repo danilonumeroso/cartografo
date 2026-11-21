@@ -74,6 +74,10 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .mode-seg button.on[data-v=edit] { background: var(--gold); color: var(--gold-ink); }
 .mode-seg button.on[data-v=session] { background: var(--violet); color: var(--violet-ink); }
 .tv-area { display: flex; align-items: center; gap: 8px; }
+.gen-btn { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 13px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-solid)); color: var(--text); font-weight: 600; white-space: nowrap; }
+.gen-btn:hover { background: color-mix(in srgb, var(--accent) 24%, var(--panel-solid)); }
+.gen-btn[hidden] { display: none; }
+@media (max-width: 1180px) { .gen-btn-label { display: none; } .gen-btn { padding: 0 10px; } }
 .tv-btn { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid #2e3340; background: var(--panel-solid); color: var(--text); white-space: nowrap; }
 .tv-btn:hover { border-color: var(--line2); }
 .tv-chip { display: flex; align-items: center; height: 38px; border-radius: 10px; border: 1px solid #2d5a3d; background: #14201a; overflow: hidden; white-space: nowrap; }
@@ -401,6 +405,7 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .gen-adv-body { display: flex; flex-direction: column; gap: 22px; margin-top: -10px; }
 .gen-styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .gen-styles-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gen-styles-4 > :first-child { grid-column: 1 / -1; }
 .gen-style { height: 66px; border-radius: 11px; border: 1px solid #2e3340; background: var(--raise); color: var(--text2); font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px; text-align: center; }
 .gen-style:hover { border-color: var(--line2); }
 .gen-style.on { border: 2px solid var(--gold); background: #2a2416; color: var(--gold-hi); font-weight: 600; }

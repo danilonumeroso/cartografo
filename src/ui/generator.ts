@@ -1,6 +1,6 @@
 import { h, icon, toast } from '../dom';
 import {
-  DungeonLayout, DungeonParams, DungeonStats, DungeonStyle, generateDungeon, LAYOUTS, layoutDesc, layoutName, levelName, PRESET_ORDER, PresetId, presetDesc, presetName, PRESETS,
+  CorridorStyle, corridorStyleName, DungeonLayout, DungeonParams, DungeonStats, DungeonStyle, generateDungeon, LAYOUTS, Motif, motifName, MOTIFS, layoutDesc, layoutName, levelName, PRESET_ORDER, PresetId, presetDesc, presetName, PRESETS,
   randomSeed, ROOM_SHAPES, ROOM_THEMES, RoomShape, RoomTheme, seedPrefix, shapeName, styleName, themeName,
 } from '../dungeon';
 import type { Editor } from '../editor';
@@ -145,6 +145,10 @@ function render(ed: Editor) {
     s.mode === 'apply' ? h('span', { class: 'gen-warn' }, t('Replaces the content of “{name}”', { name: ed.rt.doc.name })) : '',
     h('div', { class: 'spacer' }),
     h('button', { class: 'chip-btn', onclick: close }, t('Cancel')),
+    s.mode === 'new' ? h('button', { class: 'chip-btn', title: t('Bare rock, stone walls and fog of war: draw the rooms yourself'), onclick: async () => {
+      hideGenerator(ed);
+      await ed.createMap({ name: t('Dungeon'), cols: s.cols, rows: s.rows, template: 'blank-dungeon' });
+    } }, icon('roomRect', 16), t('Start empty')) : '',
     h('button', { class: 'btn-primary', onclick: confirmGen }, s.mode === 'new' ? t('Create map') : t('Apply to “{name}”', { name: ed.rt.doc.name }), icon('arrowRight', 18))));
 
   // ---------------------------------------------------------------- parameters
@@ -171,6 +175,11 @@ function render(ed: Editor) {
         onclick: () => { s.preset = id; s.params = clone(PRESETS[id]); s.seed = `${seedPrefix(id)}-${s.seed.split('-').pop()}`; s.variants = freshVariants(s); rerender(); },
       }, presetName(id)))),
       h('p', { class: 'hint' }, presetDesc(s.preset))),
+    sec(t('Theme'),
+      h('div', { class: 'chips' }, ...MOTIFS.map((m: Motif) => h('button', {
+        class: 'chip' + ((p.motif ?? 'none') === m ? ' on' : ''), 'aria-pressed': String((p.motif ?? 'none') === m),
+        onclick: () => setParam('motif', m, true),
+      }, motifName(m))))),
     s.mode === 'new'
       ? sec(t('Size'), h('div', { class: 'seg' }, ...SIZES.map(([n, c, r], i) => h('button', {
         class: i === s.size ? 'on' : '', onclick: () => { s.size = i; s.cols = c; s.rows = r; rerender(); },
@@ -196,6 +205,8 @@ function render(ed: Editor) {
       sec(t('Corridors'),
         h('div', { class: 'gen-row' }, h('span', { class: 'gen-label' }, t('Width')),
           h('div', { class: 'seg' }, ...([[1, '1'], [2, '2'], [0, t('Mixed')]] as [0 | 1 | 2, string][]).map(([v, l]) => h('button', { class: p.corridorWidth === v ? 'on' : '', onclick: () => setParam('corridorWidth', v, true) }, l)))),
+        h('div', { class: 'gen-row' }, h('span', { class: 'gen-label' }, t('Course')),
+          h('div', { class: 'seg' }, ...(['auto', 'straight', 'errant'] as CorridorStyle[]).map((v) => h('button', { class: (p.corridorStyle ?? 'auto') === v ? 'on' : '', onclick: () => setParam('corridorStyle', v, true) }, corridorStyleName(v))))),
         range(t('Loops (alternative routes)'), p.loops, 0, 4, 1, levelName, (v) => setParam('loops', v)),
         range(t('Dead ends'), p.deadEnds, 0, 4, 1, levelName, (v) => setParam('deadEnds', v))),
       sec(t('Caves'),

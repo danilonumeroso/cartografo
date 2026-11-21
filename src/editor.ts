@@ -212,7 +212,10 @@ export class Editor {
     const doc = world ? newWorldDoc(o.name, size(o.cols), size(o.rows)) : city ? newCityDoc(o.name, size(o.cols), size(o.rows)) : newDoc(o.name, size(o.cols), size(o.rows), bg);
     if (o.id) doc.id = o.id;
     if (o.parent) doc.parent = o.parent;
+    // an empty dungeon: bare rock to draw rooms on, ready for fog of war and torchlight
+    if (o.template === 'blank-dungeon') { doc.wallStyle = 'stone'; doc.fogEnabled = true; doc.ambient = 0.5; }
     const rt = new MapRuntime(doc);
+    if (o.template === 'blank-dungeon') rt.fog.fillAll();
     if (world) generateWorld(rt, o.world?.params ?? DEFAULT_WORLD, o.world?.seed ?? randomSeed('WORLD'));
     else if (city) generateCity(rt, o.city?.params ?? DEFAULT_CITY, o.city?.seed ?? randomSeed('CITY'));
     else if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);

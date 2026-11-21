@@ -9,8 +9,13 @@ export type RoomShape = 'rect' | 'round' | 'cross' | 'irregular';
 export type RoomTheme = 'crypt' | 'ritual' | 'prison' | 'storage' | 'throne' | 'library' | 'barracks';
 export type PresetId = 'crypt' | 'bandits' | 'mine' | 'temple' | 'fortress';
 /** How rooms are laid out and connected. 'auto' follows the style. */
-export type DungeonLayout = 'auto' | 'sparse' | 'compact' | 'organic' | 'hall' | 'gallery' | 'symmetric';
-export const LAYOUTS: DungeonLayout[] = ['auto', 'sparse', 'compact', 'organic', 'hall', 'gallery', 'symmetric'];
+export type DungeonLayout = 'auto' | 'sparse' | 'compact' | 'organic' | 'hall' | 'gallery' | 'symmetric' | 'intricate';
+export const LAYOUTS: DungeonLayout[] = ['auto', 'sparse', 'compact', 'organic', 'hall', 'gallery', 'symmetric', 'intricate'];
+/** A theme for the whole dungeon: walls, floors, pools and props. */
+export type Motif = 'none' | 'undead' | 'aquatic' | 'fire' | 'cold' | 'infernal' | 'aberrant' | 'vermin' | 'arcane';
+export const MOTIFS: Motif[] = ['none', 'undead', 'aquatic', 'fire', 'cold', 'infernal', 'aberrant', 'vermin', 'arcane'];
+/** How corridors run: 'auto' follows the layout. */
+export type CorridorStyle = 'auto' | 'straight' | 'errant';
 
 export interface DungeonParams {
   style: DungeonStyle;
@@ -39,6 +44,9 @@ export interface DungeonParams {
   ambient: number;
   fog: boolean;
   numbers: boolean;
+  /** Missing in parameters saved before themes existed: treated as 'none'. */
+  motif?: Motif;
+  corridorStyle?: CorridorStyle;
 }
 
 export interface DungeonStats { rooms: number; loops: number; doors: number; secretDoors: number; traps: number; caves: number }
@@ -78,8 +86,11 @@ export const presetDesc = (p: PresetId) => ({
   temple: t('Crumbling halls of odd shapes, wide passages, rubble and moss.'),
   fortress: t('Many regular rooms, wide corridors and doors everywhere.'),
 })[p];
-export const layoutName = (l: DungeonLayout) => ({ auto: t('Automatic'), sparse: t('Sparse'), compact: t('Compact'), organic: t('Organic'), hall: t('Great hall'), gallery: t('Gallery'), symmetric: t('Symmetric') })[l];
+export const layoutName = (l: DungeonLayout) => ({ auto: t('Automatic'), sparse: t('Sparse'), compact: t('Compact'), organic: t('Organic'), hall: t('Great hall'), gallery: t('Gallery'), symmetric: t('Symmetric'), intricate: t('Intricate') })[l];
+export const motifName = (m: Motif) => ({ none: t('None'), undead: t('Undead'), aquatic: t('Aquatic'), fire: t('Fire'), cold: t('Cold'), infernal: t('Infernal'), aberrant: t('Aberrant'), vermin: t('Vermin'), arcane: t('Arcane') })[m];
+export const corridorStyleName = (c: CorridorStyle) => ({ auto: t('Automatic'), straight: t('Straight'), errant: t('Winding') })[c];
 export const layoutDesc = (l: DungeonLayout) => ({
+  intricate: t('Rooms on a grid, joined by a tangle of narrow passages with most dead ends trimmed, like a classic module.'),
   auto: t('A different layout for every seed, among those that suit the style.'),
   hall: t('A big pillared hall in the middle, the other rooms around it.'),
   gallery: t('A long colonnaded gallery crosses the map, rooms open off both sides.'),
@@ -90,9 +101,9 @@ export const layoutDesc = (l: DungeonLayout) => ({
 })[l];
 /** Layouts that 'auto' picks from, per style (repeats make a layout more likely). */
 const AUTO_LAYOUTS: Record<DungeonStyle, Exclude<DungeonLayout, 'auto'>[]> = {
-  rooms: ['sparse', 'sparse', 'compact', 'hall', 'gallery', 'symmetric'],
-  mixed: ['organic', 'organic', 'sparse', 'hall'],
-  ruins: ['organic', 'symmetric', 'hall', 'gallery'],
+  rooms: ['sparse', 'sparse', 'compact', 'hall', 'gallery', 'symmetric', 'intricate', 'intricate'],
+  mixed: ['organic', 'organic', 'sparse', 'hall', 'intricate'],
+  ruins: ['organic', 'symmetric', 'hall', 'gallery', 'intricate'],
 };
 /** The concrete layout used for a set of parameters: 'auto' picks one per seed. */
 export function resolveLayout(p: DungeonParams, r: Rng): Exclude<DungeonLayout, 'auto'> {
@@ -120,6 +131,18 @@ const PALETTES: Record<DungeonStyle, Palette[]> = {
     { wall: 'sandstone', floors: ['sandstone', 'crazypaving', 'wornflags'], corridor: 'wornflags' },
     { wall: 'marble', floors: ['marbledark', 'mosaic', 'mossycobble'], corridor: 'crazypaving' },
   ],
+};
+/** Dungeon themes: they replace the palette and add their pools and props to every room. */
+interface MotifLook { wall: WallStyle; floors: string[]; corridor: string; liquids: string[]; props: string[]; themes?: RoomTheme[]; ambient?: number }
+const MOTIF_LOOK: Record<Exclude<Motif, 'none'>, MotifLook> = {
+  undead: { wall: 'bone', floors: ['bonefloor', 'darktiles', 'darktiles'], corridor: 'darktiles', liquids: ['blood'], props: ['skeleton', 'skulls', 'bones', 'coffin_open', 'chained_skeleton', 'giant_ribcage', 'green_brazier'], themes: ['crypt', 'ritual', 'prison'], ambient: 0.1 },
+  aquatic: { wall: 'stone', floors: ['mossycobble', 'wornflags', 'mossycobble'], corridor: 'mossycobble', liquids: ['water', 'water', 'swampwater'], props: ['seaweed', 'coral', 'seashells', 'fishing_net', 'cave_pool', 'puddle'] },
+  fire: { wall: 'obsidian', floors: ['obsidian', 'ash', 'darktiles'], corridor: 'ash', liquids: ['lava'], props: ['lava_vent', 'scorch', 'ash_pile', 'steam_vent', 'brazier'], ambient: -0.1 },
+  cold: { wall: 'ice', floors: ['ice', 'snow', 'stonetiles'], corridor: 'ice', liquids: ['ice'], props: ['ice_spikes', 'snow_drift', 'frozen_pond', 'crystals_blue', 'blue_brazier'] },
+  infernal: { wall: 'obsidian', floors: ['obsidian', 'runes', 'darktiles'], corridor: 'obsidian', liquids: ['lava', 'blood'], props: ['summoning_circle', 'sacrificial_altar', 'chains', 'blood_trail', 'void_rift', 'skulls'], themes: ['ritual', 'throne', 'prison'] },
+  aberrant: { wall: 'dark', floors: ['flesh', 'darktiles', 'darktiles'], corridor: 'darktiles', liquids: ['acid', 'poison'], props: ['tentacles', 'slime_puddle', 'slime_trail', 'egg_sacs', 'cocoon', 'void_rift'] },
+  vermin: { wall: 'stone', floors: ['darktiles', 'wornflags', 'dirt'], corridor: 'dirt', liquids: ['swampwater', 'mud'], props: ['giant_web', 'egg_sacs', 'cocoon', 'rats', 'trash_pile', 'puddle_muddy', 'cobweb'], themes: ['storage', 'prison', 'barracks'] },
+  arcane: { wall: 'marble', floors: ['runes', 'marbledark', 'mosaic'], corridor: 'marbledark', liquids: ['water'], props: ['floating_crystal', 'ley_line', 'arcane_bookcase', 'blue_brazier', 'crystal_ball', 'summoning_circle'], themes: ['library', 'ritual', 'throne'] },
 };
 /** Floors that suit a room's purpose; a themed room often gets one of them. */
 const THEME_FLOORS: Record<RoomTheme, string[]> = {
@@ -166,9 +189,10 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
   // the dungeon's character (look and layout) comes from its own, well-mixed stream: similar seeds
   // such as CRYPT-1234 and CRYPT-1240 must not keep getting the same palette or layout
   const rc = mulberry32(mix32(seedNumber(seed) ^ 0x5bd1e995));
-  const pal = pick(rc, PALETTES[params.style] ?? PALETTES.rooms);
-  doc.bg = 'rock'; doc.wallStyle = pal.wall; doc.caveFloor = 'cave';
-  doc.ambient = params.ambient; doc.fogEnabled = params.fog;
+  const motif = params.motif && params.motif !== 'none' ? MOTIF_LOOK[params.motif] : null;
+  const pal: Palette = motif ? { wall: motif.wall, floors: motif.floors, corridor: motif.corridor } : pick(rc, PALETTES[params.style] ?? PALETTES.rooms);
+  doc.bg = 'rock'; doc.wallStyle = pal.wall; doc.caveFloor = params.motif === 'cold' ? 'ice' : params.motif === 'fire' ? 'ash' : 'cave';
+  doc.ambient = Math.max(0, Math.min(0.95, params.ambient + (motif?.ambient ?? 0))); doc.fogEnabled = params.fog;
   const shapes = params.shapes.length ? params.shapes : ['rect' as RoomShape];
   let minS = Math.max(2, Math.min(params.minSize, params.maxSize)), maxS = Math.max(minS, params.maxSize);
   let gap = params.style === 'ruins' ? 0 : 2;
@@ -196,7 +220,7 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     for (const c of cells) { const cx = c % C, cy = (c / C) | 0; const d = Math.hypot(cx + 0.5 - (x + w / 2), cy + 0.5 - (y + h / 2)); if (d < bd) { bd = d; best = [cx, cy]; } }
     const i = rooms.length;
     for (const c of cells) owner[c] = i;
-    const floor = r() < 0.12 ? 'tiles' : pick(r, pal.floors);
+    const floor = !motif && r() < 0.12 ? 'tiles' : pick(r, pal.floors);
     rooms.push({ x, y, w, h, shape, cave: false, cells, anchor: best, floor });
     polys.push(pts);
     return i;
@@ -281,8 +305,19 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
       mirror.set(i, j); mirror.set(j, i);
     }
   }
+  else if (layout === 'intricate') {
+    // donjon-style: rooms on odd cells with odd sizes, so that a maze on the odd grid can wrap around them
+    const odd = (lo: number, hi: number) => { let v = rint(r, lo, Math.max(lo, hi)); if (v % 2 === 0) v += v < hi ? 1 : -1; return v; };
+    for (let a = 0; a < 500 && rooms.length < target; a++) {
+      const w = odd(Math.max(3, minS), Math.min(maxS, C - 4)), h = odd(Math.max(3, minS), Math.min(maxS, R - 4));
+      const x = odd(1, C - w - 2), y = odd(1, R - h - 2);
+      if (x < 1 || y < 1 || x + w > C - 2 || y + h > R - 2) continue;
+      if (rooms.some((o) => x < o.x + o.w + 1 && o.x < x + w + 1 && y < o.y + o.h + 1 && o.y < y + h + 1)) continue;
+      addRoom(x, y, w, h, { shape: 'rect' });
+    }
+  }
   // sparse/organic layouts, the rooms around a hall or a gallery, and fallback when a partition could not fit two rooms
-  if (layout !== 'compact' && layout !== 'symmetric' || rooms.length < 2) scatter(target + (hub >= 0 || gallery >= 0 ? 1 : 0));
+  if ((layout !== 'compact' && layout !== 'symmetric' && layout !== 'intricate') || rooms.length < 2) scatter(target + (hub >= 0 || gallery >= 0 ? 1 : 0));
   stats.rooms = rooms.length;
   if (!rooms.length) return stats;
   // the entrance: far from the great hall, at one end of the gallery, on the axis of a symmetric plan
@@ -303,11 +338,14 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     for (const i of order.slice(0, mirror.size ? Math.ceil(n / 2) : n)) { rooms[i].cave = true; if (mirror.has(i)) rooms[mirror.get(i)!].cave = true; }
   }
   stats.caves = rooms.filter((o) => o.cave).length;
+  // plain rooms are numbered 1, 2, 3… in order; the great hall and the gallery go by their names
+  const roomNo = new Map<number, number>();
+  rooms.forEach((_, i) => { if (i !== hub && i !== gallery) roomNo.set(i, roomNo.size + 1); });
   rooms.forEach((o, i) => {
     if (o.cave) {
       for (const c of o.cells) b.paint('cave', (c % C) + 0.5 + rrange(r, -0.3, 0.3), ((c / C) | 0) + 0.5 + rrange(r, -0.3, 0.3), rrange(r, 0.8, 1.1), 0.5, 1);
     } else {
-      const rm = b.room(0, 0, 0, 0, o.floor, i === hub ? t('Great hall') : i === gallery ? t('Gallery') : t('Room {n}', { n: i + 1 }));
+      const rm = b.room(0, 0, 0, 0, o.floor, i === hub ? t('Great hall') : i === gallery ? t('Gallery') : t('Room {n}', { n: roomNo.get(i)! }));
       rm.pts = polys[i].map((v) => v * CELL);
       o.rm = rm;
     }
@@ -319,7 +357,9 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
   const linked = new Set<string>();
   const key = (i: number, j: number) => `${Math.min(i, j)}-${Math.max(i, j)}`;
   const extra = Math.round([0, 1, 2, 3, 5][Math.max(0, Math.min(4, params.loops))] * (rooms.length >= 6 ? 1 : 0.5));
-  if (layout === 'organic') {
+  if (layout === 'intricate') {
+    // corridors come from the maze, below
+  } else if (layout === 'organic') {
     // Delaunay graph of the room anchors: spanning tree first (Kruskal), loops from the remaining edges.
     const pts = rooms.map((o) => [o.anchor[0] + r() * 1e-3, o.anchor[1] + r() * 1e-3] as [number, number]);
     let edges = delaunayEdges(pts);
@@ -476,8 +516,11 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     return path;
   };
   // built corridors wiggle less than natural tunnels, to avoid a staircase look
+  const cStyle = params.corridorStyle ?? 'auto';
   const route = (ax: number, ay: number, bx: number, by: number, tunnel: boolean) =>
-    layout === 'organic' ? windingPath(ax, ay, bx, by, tunnel ? 0.3 : 0.12) : lPath(ax, ay, bx, by);
+    cStyle === 'errant' ? windingPath(ax, ay, bx, by, tunnel ? 0.35 : 0.25)
+      : cStyle === 'straight' && !tunnel ? lPath(ax, ay, bx, by)
+        : layout === 'organic' || tunnel && cStyle === 'straight' ? windingPath(ax, ay, bx, by, tunnel ? 0.3 : 0.12) : lPath(ax, ay, bx, by);
   /** A path's mirror image across the vertical axis (a corridor of width w covers x..x+w-1). */
   const mirrorPath = (path: [number, number][], w: number) => path.map(([x, y]) => [C - x - w, y] as [number, number]);
   const carved: { path: [number, number][]; w: number; tunnel: boolean }[] = [];
@@ -499,8 +542,89 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     carved.push({ path, w, tunnel });
   });
 
+  if (layout === 'intricate') {
+    // ---- donjon-style passages: a maze fills every free odd cell, connectors join each maze and room to the
+    // rest (a few more make loops), then dead ends are trimmed back, keeping a share set by "Dead ends"
+    const region = new Int32Array(C * R).fill(-1);
+    let nReg = 0;
+    rooms.forEach((o) => { for (const c of o.cells) region[c] = nReg; nReg++; });
+    const DIRS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const inner = (x: number, y: number) => x >= 1 && y >= 1 && x <= C - 2 && y <= R - 2;
+    const turn = cStyle === 'straight' ? 0.12 : cStyle === 'errant' ? 0.7 : 0.4; // chance of turning at each step
+    for (let y0 = 1; y0 <= R - 2; y0 += 2) for (let x0 = 1; x0 <= C - 2; x0 += 2) {
+      if (region[idx(x0, y0)] >= 0) continue;
+      const reg = nReg++;
+      region[idx(x0, y0)] = reg;
+      const stack: [number, number][] = [[x0, y0]];
+      let last: [number, number] | null = null;
+      while (stack.length) {
+        const [cx, cy] = stack[stack.length - 1];
+        const free = DIRS.filter(([dx, dy]) => inner(cx + dx * 2, cy + dy * 2) && region[idx(cx + dx * 2, cy + dy * 2)] < 0);
+        if (!free.length) { stack.pop(); last = null; continue; }
+        const d: [number, number] = last && free.some(([dx, dy]) => dx === last![0] && dy === last![1]) && r() > turn ? last : pick(r, free);
+        region[idx(cx + d[0], cy + d[1])] = reg; region[idx(cx + d[0] * 2, cy + d[1] * 2)] = reg;
+        stack.push([cx + d[0] * 2, cy + d[1] * 2]); last = d;
+      }
+    }
+    // connectors: walls between two different regions
+    const conns: { x: number; y: number; regs: number[] }[] = [];
+    for (let y = 1; y <= R - 2; y++) for (let x = 1; x <= C - 2; x++) {
+      if (region[idx(x, y)] >= 0) continue;
+      const regs = [...new Set(DIRS.map(([dx, dy]) => region[idx(x + dx, y + dy)]).filter((v) => v >= 0))];
+      if (regs.length >= 2) conns.push({ x, y, regs });
+    }
+    const parent = Array.from({ length: nReg }, (_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const loopP = [0, 0.015, 0.03, 0.05, 0.08][Math.max(0, Math.min(4, params.loops))];
+    const openCell = new Uint8Array(C * R);
+    for (const c of conns.sort(() => r() - 0.5)) {
+      const roots = [...new Set(c.regs.map(find))];
+      // never open two connectors side by side: that would make a two-square-wide gap
+      const nextToOpen = DIRS.some(([dx, dy]) => openCell[idx(c.x + dx, c.y + dy)]);
+      if (roots.length > 1) { for (const q of roots.slice(1)) parent[q] = roots[0]; }
+      else if (nextToOpen || r() >= loopP) continue;
+      else stats.loops++;
+      openCell[idx(c.x, c.y)] = 1;
+      region[idx(c.x, c.y)] = c.regs[0];
+    }
+    // trim dead ends: a passage cell with three walls around it is filled back in, except some kept tips
+    const isOpen = (x: number, y: number) => inner(x, y) && region[idx(x, y)] >= 0;
+    const deadEnd = (x: number, y: number) => owner[idx(x, y)] < 0 && region[idx(x, y)] >= 0 && DIRS.filter(([dx, dy]) => isOpen(x + dx, y + dy)).length <= 1;
+    const keepShare = [0, 0.08, 0.18, 0.32, 0.5][Math.max(0, Math.min(4, params.deadEnds))];
+    const kept = new Set<number>();
+    for (let y = 1; y <= R - 2; y++) for (let x = 1; x <= C - 2; x++) if (deadEnd(x, y) && r() < keepShare) kept.add(idx(x, y));
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let y = 1; y <= R - 2; y++) for (let x = 1; x <= C - 2; x++) {
+        if (!deadEnd(x, y) || kept.has(idx(x, y))) continue;
+        region[idx(x, y)] = -1; openCell[idx(x, y)] = 0; changed = true;
+      }
+    }
+    // what is left must hang together with the entrance: drop stray bits, join any room left apart
+    const seen = new Uint8Array(C * R), st = [idx(rooms[entrance].anchor[0], rooms[entrance].anchor[1])];
+    seen[st[0]] = 1;
+    while (st.length) {
+      const k = st.pop()!, x = k % C, y = (k / C) | 0;
+      for (const [dx, dy] of DIRS) { const j = idx(x + dx, y + dy); if (isOpen(x + dx, y + dy) && !seen[j]) { seen[j] = 1; st.push(j); } }
+    }
+    for (let y = 1; y <= R - 2; y++) for (let x = 1; x <= C - 2; x++) {
+      const c = idx(x, y);
+      if (region[c] < 0 || owner[c] >= 0) continue;
+      if (!seen[c]) continue;
+      markCorridor(x, y, 1); corridorCells.add(c);
+      // a door where a passage meets a room
+      for (const [dx, dy] of DIRS) {
+        const n = idx(x + dx, y + dy);
+        if (owner[n] < 0 || !seen[n] || !isBuiltDoorable(n)) continue;
+        const vertical = dx !== 0;
+        addDoor(vertical ? Math.max(x, x + dx) : x + 0.5, vertical ? y + 0.5 : Math.max(y, y + dy), vertical, 1);
+      }
+    }
+    rooms.forEach((o, i) => { if (!seen[idx(o.anchor[0], o.anchor[1])]) carve(lPath(o.anchor[0], o.anchor[1], rooms[entrance].anchor[0], rooms[entrance].anchor[1]), 1, false); void i; });
+  }
+
   // dead ends: short blind passages leaving a room
-  const nDead = [0, 1, 2, 4, 6][Math.max(0, Math.min(4, params.deadEnds))];
+  const nDead = layout === 'intricate' ? 0 : [0, 1, 2, 4, 6][Math.max(0, Math.min(4, params.deadEnds))];
   for (let k = 0, tries = 0; k < nDead && tries < 60; tries++) {
     const i = rint(r, 0, rooms.length - 1), o = rooms[i];
     const [dx, dy] = pick(r, [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]);
@@ -571,7 +695,7 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
     if (params.numbers) {
       const first = [...o.cells].sort((a, c) => ((a / C) | 0) - ((c / C) | 0) || (a % C) - (c % C))[0];
       const [lx, ly] = cxy(first);
-      b.label(String(i + 1), lx + 0.05, ly, 44);
+      if (roomNo.has(i)) b.label(String(roomNo.get(i)), lx + 0.05, ly, 44);
     }
     if (o.cave) {
       times(wall.length * 0.2 * m + 1, () => onWall(pick(r, ['stalagmite', 'rocks', 'boulder', 'stalagmites']), 0.1, rrange(r, 0.7, 1.1)));
@@ -602,9 +726,9 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
       const [x, y] = cxy(c);
       b.label(t('Entrance'), x, y + 0.3, 30);
     } else if (i !== hub && i !== gallery) {
-      const theme = pick(r, themes);
+      const theme = pick(r, motif?.themes ?? themes);
       // a themed room often has its own floor (a library in parquet, a throne room in marble…)
-      if (o.rm && r() < 0.55) { o.rm.floor = pick(r, THEME_FLOORS[theme]); if (mirror.has(i)) { const m2 = rooms[mirror.get(i)!].rm; if (m2) m2.floor = o.rm.floor; } }
+      if (o.rm && r() < 0.55) { o.rm.floor = pick(r, motif ? motif.floors : THEME_FLOORS[theme]); if (mirror.has(i)) { const m2 = rooms[mirror.get(i)!].rm; if (m2) m2.floor = o.rm.floor; } }
       switch (theme) {
         case 'crypt':
           times(Math.max(1, center.length / 6) * m, () => inCenter(pick(r, ['sarcophagus', 'sarcophagus', 'coffin', 'tomb_slab']), pick(r, [0, Math.PI / 2])));
@@ -650,12 +774,17 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
       }
     }
     if (params.ambient > 0.05) times(o.w * o.h > 20 ? 2 : 1, () => onWall('torch', 0.38, 1));
+    // the dungeon's theme shows in every room: its props and its pools
+    if (motif) {
+      times(rint(r, 1, 2) + m, () => (r() < 0.5 ? onWall(pick(r, motif.props), 0.15, rrange(r, 0.8, 1)) : inCenter(pick(r, motif.props), r() * 6.28, rrange(r, 0.8, 1))));
+      if (r() < 0.55) { const c = takeCenter(); if (c !== null) { const [x, y] = cxy(c); b.paint(pick(r, motif.liquids), x, y, rrange(r, 0.6, 1.3), 0.2, 0.9); } }
+    }
     if (r() < 0.6) onWall('cobweb', 0.2);
     if (r() < 0.25) inCenter(pick(r, ['floor_crack', 'papers', 'pottery_shards', 'scorch', 'skulls']));
     if (params.style === 'ruins') {
       times(rint(r, 1, 3), () => { const c = takeCenter() ?? takeWall()?.c; if (c == null) return; const [x, y] = cxy(c); b.paint(pick(r, ['moss', 'dirt', 'gravel']), x, y, rrange(r, 0.8, 1.6), 0.1, 0.7); });
       times(rint(r, 1, 3), () => inCenter('rubble'));
-    } else if (r() < 0.3) { const c = takeCenter(); if (c !== null) { const [x, y] = cxy(c); b.paint(pick(r, ['water', 'moss']), x, y, rrange(r, 0.6, 1.2), 0.2, 0.8); } }
+    } else if (!motif && r() < 0.3) { const c = takeCenter(); if (c !== null) { const [x, y] = cxy(c); b.paint(pick(r, ['water', 'moss']), x, y, rrange(r, 0.6, 1.2), 0.2, 0.8); } }
   });
 
   // traps: hidden, mostly in corridors

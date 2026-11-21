@@ -21,6 +21,15 @@ export const INTENTS: { id: Intent; name: string; icon: string; tool: Tool; key:
   { id: 'annotate', name: t('Annotate'), icon: 'annotate', tool: 'text', key: 'T' },
 ];
 
+/** The generator that suits the current map: world, city, or the dungeon generator for battle maps. */
+function openRegenerate(ed: Editor) {
+  if (ed.rt.doc.combat.active) { import('../dom').then((d) => d.toast(t('End combat before regenerating the map'))); return; }
+  const kind = ed.rt.doc.kind;
+  if (kind === 'world') import('./worldgen').then((m) => m.showWorldGenerator(ed, 'apply'));
+  else if (kind === 'city') import('./citygen').then((m) => m.showCityGenerator(ed, 'apply'));
+  else import('./generator').then((m) => m.showGenerator(ed, 'apply'));
+}
+
 // ============================================================================ top bar
 export function buildTopbar(ed: Editor): HTMLElement {
   const u = ed.el;
@@ -32,6 +41,7 @@ export function buildTopbar(ed: Editor): HTMLElement {
   u.undo = iconBtn('undo', t('Undo (Ctrl/Cmd+Z)'), () => ed.undo());
   u.redo = iconBtn('redo', t('Redo (Shift+Ctrl/Cmd+Z)'), () => ed.redo());
   u.tv = h('div', { class: 'tv-area' });
+  u.genBtn = h('button', { class: 'gen-btn', title: t('Generate a new map in place of this one'), onclick: () => openRegenerate(ed) }, icon('dice', 16), h('span', { class: 'gen-btn-label' }, t('Generate')));
   const more: HTMLButtonElement = iconBtn('more', t('More actions'), () => import('./menus').then((m) => m.moreMenu(ed, more)));
   return h('header', { class: 'topbar' },
     h('div', { class: 'top-left' },
@@ -40,7 +50,7 @@ export function buildTopbar(ed: Editor): HTMLElement {
       u.parent = h('nav', { class: 'crumbs', 'aria-label': t('Linked maps'), hidden: true }),
       h('button', { class: 'map-switch', title: t('Your maps'), onclick: () => ed.showHome() }, u.mapThumb, u.mapName, icon('chevron', 14))),
     u.modeSeg,
-    h('div', { class: 'top-right' }, u.undo, u.redo, h('span', { class: 'top-sep' }), u.tv, more));
+    h('div', { class: 'top-right' }, u.genBtn, h('span', { class: 'top-sep' }), u.undo, u.redo, h('span', { class: 'top-sep' }), u.tv, more));
 }
 
 export function updateTopbar(ed: Editor) {
@@ -64,6 +74,8 @@ export function updateTopbar(ed: Editor) {
   if (meta?.thumb) { (u.mapThumb as HTMLImageElement).src = meta.thumb; u.mapThumb.hidden = false; }
   else u.mapThumb.hidden = true;
   u.modeSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.v === ed.mode));
+  u.genBtn.hidden = ed.mode !== 'edit';
+  u.genBtn.title = ed.rt.doc.kind === 'world' ? t('Generate a new world') : ed.rt.doc.kind === 'city' ? t('Generate a new city') : t('Generate a dungeon in place of this map');
   (u.undo as HTMLButtonElement).disabled = !ed.hist.canUndo;
   (u.redo as HTMLButtonElement).disabled = !ed.hist.canRedo;
   u.tv.innerHTML = '';

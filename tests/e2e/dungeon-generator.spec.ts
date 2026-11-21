@@ -58,10 +58,10 @@ test('every preset and layout produces connected, bounded dungeons with hidden t
     const [{ MapRuntime }, { newDoc }, D, { pointInPoly }] = await Promise.all(
       ['/src/runtime.ts', '/src/model.ts', '/src/dungeon.ts', '/src/util.ts'].map(p => import(/* @vite-ignore */ p)));
     const problems: string[] = [];
-    for (const preset of D.PRESET_ORDER) for (const layout of ['auto', 'sparse', 'compact', 'organic', 'hall', 'gallery', 'symmetric']) for (const [C, R] of [[10, 10], [30, 22], [40, 30]]) for (let s = 0; s < 3; s++) {
+    for (const preset of D.PRESET_ORDER) for (const layout of ['auto', 'sparse', 'compact', 'organic', 'hall', 'gallery', 'symmetric', 'intricate']) for (const [C, R] of [[10, 10], [30, 22], [40, 30]]) for (let s = 0; s < 3; s++) {
       const seed = `${preset}-${layout}-${s}`;
       const rt = new MapRuntime(newDoc('t', C, R));
-      const stats = D.generateDungeon(rt, { ...D.PRESETS[preset], layout }, seed);
+      const stats = D.generateDungeon(rt, { ...D.PRESETS[preset], layout, motif: D.MOTIFS[(s * 3 + layout.length) % D.MOTIFS.length], corridorStyle: ['auto', 'straight', 'errant'][s] }, seed);
       const d = rt.doc;
       const open = new Uint8Array(C * R);
       const cave = rt.engine.mask('cave');
@@ -113,7 +113,7 @@ test('the Layout option changes the arrangement and keeps the seed', async ({ pa
   await openGenerator(page);
   await page.locator('.gen-adv').click();
   const layouts = page.locator('.gen-layouts button');
-  await expect(layouts).toHaveText(['Automatic', 'Sparse', 'Compact', 'Organic', 'Great hall', 'Gallery', 'Symmetric']);
+  await expect(layouts).toHaveText(['Automatic', 'Sparse', 'Compact', 'Organic', 'Great hall', 'Gallery', 'Symmetric', 'Intricate']);
   await expect(layouts.first()).toHaveClass(/on/);
   const seed = await page.locator('.gen-seed').inputValue();
   const preview = () => page.locator('.gen-preview img').getAttribute('src');
@@ -131,4 +131,23 @@ test('the Layout option changes the arrangement and keeps the seed', async ({ pa
   // Presets set their own layout: Fortress is compact.
   await page.locator('.gen-side .chip', { hasText: 'Fortress' }).click();
   await expect(page.locator('.gen-layouts button.on')).toHaveText('Compact');
+});
+
+test('a dungeon can start empty, and the top bar Generate button fills it', async ({ page }) => {
+  await openGenerator(page);
+  await button(page, 'Start empty').click();
+  await expect(page.locator('.gen')).toBeHidden();
+  await expect(page.locator('.save-status')).toHaveText('Saved');
+  const empty = await doc(page);
+  expect(empty).toMatchObject({ rooms: [], stamps: [], fogEnabled: true, wallStyle: 'stone' });
+  // Generate is shown while preparing, and opens the generator on this map
+  await button(page, 'Generate').click();
+  await expect(page.locator('.gen h1')).toHaveText('Regenerate dungeon');
+  await expect(page.locator('.gen-preview')).not.toHaveClass(/busy/);
+  await page.locator('.gen-top .btn-primary').click();
+  await expect(page.locator('.gen')).toBeHidden();
+  await expect.poll(async () => (await doc(page)).rooms.length).toBeGreaterThan(2);
+  expect((await doc(page)).id).toBe(empty.id);
+  await button(page, 'Play').click();
+  await expect(button(page, 'Generate')).toBeHidden();
 });
