@@ -438,3 +438,9 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .gen-variant.on span { color: var(--gold-hi); }
 .gen-layouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .gen-layouts button { padding: 0 6px; }
+
+.parent-btn { height: 32px; margin-left: 6px; }
+.parent-btn[hidden] { display: none; }
+.tb-group { display: inline-flex; align-items: center; gap: 4px; }
+.btn-sm { height: 32px; padding: 0 10px; font-size: 13px; }
+.pop-note { margin-left: auto; color: var(--gold-hi); font-size: 11px; }

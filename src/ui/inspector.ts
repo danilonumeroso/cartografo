@@ -6,6 +6,7 @@ import {
 } from '../model';
 import { labelFont, markerGeom, tokenRadius } from '../render';
 import { STAMP_BY_ID, VARIANTS } from '../stamps';
+import { LINK_TEMPLATES, suggestedTemplate } from '../places';
 import { DOOR_NAMES, FLOORS, iconBtn, PATH_NAMES, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
 import { t } from '../i18n';
 
@@ -80,6 +81,27 @@ function stampBar(ed: Editor, box: HTMLElement, s: Stamp, m: M, dup: HTMLElement
     iconBtn(s.hidden ? 'eyeOff' : 'eye', s.hidden ? t('Hidden from players: show') : t('Visible to players: hide'), () => { m(t('Visibility'), () => { s.hidden = !s.hidden; }); ed.refreshUI(); }, s.hidden ? 'warn' : ''),
     dup, del,
   );
+  if (STAMP_BY_ID.get(s.type)?.world) box.append(h('span', { class: 'tb-sep' }), placeLink(ed, s, m));
+}
+
+/** Link a place on the world map to a battle map: open it, create one, or pick an existing map. */
+function placeLink(ed: Editor, s: Stamp, m: M): HTMLElement {
+  const linked = s.link ? ed.maps.find((x) => x.id === s.link) : null;
+  if (linked) return h('span', { class: 'tb-group' },
+    h('button', { class: 'btn-primary btn-sm', onclick: () => ed.openLinked(s) }, icon('arrowRight', 16), t('Open {name}', { name: linked.name })),
+    iconBtn('x', t('Remove the link'), () => { m(t('Link'), () => { s.link = undefined; }); ed.refreshUI(); }));
+  const suggested = suggestedTemplate(s.type);
+  const btn: HTMLButtonElement = h('button', { class: 'chip-btn', onclick: () => {
+    const others = ed.maps.filter((x) => x.id !== ed.rt.doc.id);
+    const opts = [...LINK_TEMPLATES].sort((a, b) => (a[0] === suggested ? -1 : b[0] === suggested ? 1 : 0));
+    popover(btn, h('div', { class: 'pop-body' },
+      h('div', { class: 'pop-title' }, t('Create a map for this place')),
+      h('div', { class: 'pop-list' }, ...opts.map(([tpl, name]) => h('button', { onclick: () => { closePopover(); ed.createLinkedMap(s, tpl); } },
+        name(), tpl === suggested ? h('small', { class: 'pop-note' }, t('suggested')) : ''))),
+      others.length ? h('div', { class: 'pop-title' }, t('Or link an existing map')) : '',
+      others.length ? h('div', { class: 'pop-list' }, ...others.map((x) => h('button', { onclick: () => { closePopover(); m(t('Link'), () => { s.link = x.id; }); ed.refreshUI(); } }, x.name))) : ''), 'below');
+  } }, icon('map', 16), t('Battle map…'));
+  return btn;
 }
 
 function roomCard(ed: Editor, box: HTMLElement, r: Room, m: M, dup: HTMLElement, del: HTMLElement) {

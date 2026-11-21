@@ -23,7 +23,7 @@ export type MapKind = 'battle' | 'world';
 export type GridShape = 'square' | 'hex';
 export type DistUnit = 'ft' | 'mi' | 'km';
 export interface Door { id: string; x: number; y: number; rot: number; kind: DoorKind; open: boolean; width: number }
-export interface Stamp { id: string; type: string; x: number; y: number; rot: number; scale: number; flip?: boolean; variant: number; hidden?: boolean }
+export interface Stamp { id: string; type: string; x: number; y: number; rot: number; scale: number; flip?: boolean; variant: number; hidden?: boolean; /** Id of the map this place opens. */ link?: string }
 export interface Light { id: string; x: number; y: number; radius: number; color: string; intensity: number; flicker: boolean; stampId?: string }
 export interface Label { id: string; x: number; y: number; text: string; font: string; size: number; color: string; stroke: string; rot: number; bold?: boolean; italic?: boolean; hidden?: boolean }
 export interface Marker { id: string; x: number; y: number; icon: string; color: string; title: string; notes: string; playerNotes: string; visible: boolean; link?: string }
@@ -53,6 +53,8 @@ export interface MapDoc {
   weather: Weather;
   /** World maps: cells of fog cleared around player characters when they move during play. */
   sight?: number;
+  /** The map this one was created from (a place on a world map). */
+  parent?: string;
   createdAt: number; updatedAt: number;
 }
 

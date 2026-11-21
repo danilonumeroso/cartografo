@@ -6,6 +6,7 @@ import { generate, GenKind } from './generate';
 import { DEFAULT_WORLD, generateWorld, WorldParams } from './worldgen';
 import { DungeonParams, generateDungeon, randomSeed } from './dungeon';
 import { hexCenter } from './util';
+import { placeName } from './places';
 import { History } from './history';
 import {
   CELL, Combat, MIN_SIZE, DoorKind, PathKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, newWorldDoc, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
@@ -197,12 +198,14 @@ export class Editor {
     if (this.mode === 'session') this.channel.send({ t: 'map', id });
   }
 
-  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string }; world?: { params: WorldParams; seed: string } }) {
+  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string }; world?: { params: WorldParams; seed: string }; id?: string; parent?: string }) {
     if (this.rt) await this.saveNow();
     const bg = o.template === 'outdoor' ? 'grass' : o.template === 'interior' ? 'wood' : 'rock';
     const size = (v: number) => Math.max(MIN_SIZE, Math.min(80, Math.round(v) || MIN_SIZE));
     const world = o.template === 'world';
     const doc = world ? newWorldDoc(o.name, size(o.cols), size(o.rows)) : newDoc(o.name, size(o.cols), size(o.rows), bg);
+    if (o.id) doc.id = o.id;
+    if (o.parent) doc.parent = o.parent;
     const rt = new MapRuntime(doc);
     if (world) generateWorld(rt, o.world?.params ?? DEFAULT_WORLD, o.world?.seed ?? randomSeed('WORLD'));
     else if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);
@@ -215,6 +218,26 @@ export class Editor {
     await this.saveNow();
     await this.refreshMaps();
     this.updateTitle();
+  }
+
+  /** Create a battle map for a place on the world map and link the place to it. */
+  async createLinkedMap(s: Stamp, template: string) {
+    const world = this.rt.doc, id = uid(), name = placeName(world, s);
+    this.mutate(t('Link'), () => { s.link = id; });
+    await this.createMap({ id, parent: world.id, name, cols: 30, rows: 22, template });
+    toast(t('“{name}” is linked: double-click the place on the world map to open it', { name }));
+  }
+  /** Open the map linked to a place, if it still exists. */
+  async openLinked(s: Stamp) {
+    if (!s.link) return;
+    if (!this.maps.some((m) => m.id === s.link)) { toast(t('The linked map no longer exists')); return; }
+    await this.openMap(s.link);
+  }
+  /** A linked place under the pointer (works in Play too, where props are not selectable). */
+  linkedStampAt(x: number, y: number): Stamp | null {
+    const d = this.rt.doc;
+    for (let i = d.stamps.length - 1; i >= 0; i--) { const s = d.stamps[i]; if (s.link && this.inStamp(s, x, y)) return s; }
+    return null;
   }
 
   async regenerate(kind: GenKind) {
@@ -791,6 +814,11 @@ export class Editor {
 
   private onDbl(e: MouseEvent) {
     if ((this.tool === 'room' && this.opts.room.shape === 'poly') || this.tool === 'wall' || this.tool === 'path') { this.finishDraft(); return; }
+    if (this.tool === 'select') {
+      const [x, y] = this.toWorld(e);
+      const place = this.linkedStampAt(x, y);
+      if (place) { this.openLinked(place); return; }
+    }
     if (this.tool === 'select' && this.mode === 'edit') {
       const [x, y] = this.toWorld(e);
       const hit = this.hit(x, y);
@@ -1204,6 +1232,14 @@ export class Editor {
     });
     ctx.save();
     ctx.setTransform(this.dpr * z, 0, 0, this.dpr * z, this.dpr * this.view.x, this.dpr * this.view.y);
+    // places linked to another map (only the DM sees the badge)
+    for (const s of rt.doc.stamps) {
+      if (!s.link) continue;
+      const { w, h } = stampSize(s), r = 11 / z, bx = s.x + (w / 2) * s.scale * 0.8, by = s.y - (h / 2) * s.scale * 0.8;
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fillStyle = '#e8b84a'; ctx.fill(); ctx.lineWidth = 2 / z; ctx.strokeStyle = '#1c1510'; ctx.stroke();
+      ctx.lineWidth = 2.2 / z; ctx.strokeStyle = '#1c1510';
+      for (const k of [-1, 1]) { ctx.beginPath(); ctx.ellipse(bx + k * 2.6 / z, by - k * 2.6 / z, 4.2 / z, 2.4 / z, -Math.PI / 4, 0, Math.PI * 2); ctx.stroke(); }
+    }
     // zones & room outlines
     for (const r of rt.doc.rooms) {
       const show = r.zoneOnly || (this.tool === 'room' && !session) || (this.tool === 'fog' && this.opts.fog.mode === 'room');

@@ -1111,4 +1111,12 @@ export const IT: Record<string, string> = {
   "Fog clears around the party": "La nebbia si dirada intorno al gruppo",
   "{n} hexes": "{n} esagoni",
   "Off": "Spento",
+  "“{name}” is linked: double-click the place on the world map to open it": "“{name}” è collegata: doppio clic sul luogo nella mappa del mondo per aprirla",
+  "The linked map no longer exists": "La mappa collegata non esiste più",
+  "Remove the link": "Rimuovi il collegamento",
+  "Create a map for this place": "Crea una mappa per questo luogo",
+  "suggested": "consigliata",
+  "Or link an existing map": "Oppure collega una mappa esistente",
+  "Battle map…": "Mappa di battaglia…",
+  "Back to {name}": "Torna a {name}",
 };

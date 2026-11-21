@@ -90,3 +90,21 @@ test('moving the party in Play clears the fog around it', async ({ page }) => {
   expect(await fogAt(x, y)).toBe(0);
   expect(await fogAt(x + 600, y)).toBe(255);
 });
+
+test('a place on the world map gets its own linked battle map', async ({ page }) => {
+  await newWorld(page);
+  const world = await doc(page);
+  const town = world.stamps.find((s) => ['w_town', 'w_city', 'w_village', 'w_capital', 'w_port'].includes(s.type))!;
+  await page.evaluate(async (id) => {
+    const ed = window.editor;
+    await ed.createLinkedMap(ed.rt.doc.stamps.find((s) => s.id === id)!, 'tavern');
+  }, town.id);
+  const child = await doc(page);
+  expect(child.kind).toBe('battle');
+  expect(child.parent).toBe(world.id);
+  expect(child.rooms.length).toBeGreaterThan(0);
+  await expect(page.locator('.parent-btn')).toHaveText(`Back to ${world.name}`);
+  await page.locator('.parent-btn').click();
+  await page.waitForFunction((id) => window.editor.rt.doc.id === id, world.id);
+  expect((await doc(page)).stamps.find((s) => s.id === town.id)!.link).toBe(child.id);
+});
