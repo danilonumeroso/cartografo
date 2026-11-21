@@ -12,8 +12,10 @@ async function newCity(page: Page, seed = 'CITY-TEST', again = false) {
   await seedBox.fill(seed);
   await seedBox.press('Enter');
   await expect(page.locator('.gen-preview')).not.toHaveClass(/busy/, { timeout: 30_000 });
+  // a second map of the same kind is already open, so wait for a different map id
+  const before = await page.evaluate(() => window.editor?.rt?.doc.id ?? null);
   await page.locator('.gen').getByRole('button', { name: 'Create map' }).click();
-  await page.waitForFunction(() => window.editor?.rt?.doc.kind === 'city');
+  await page.waitForFunction(([k, id]) => window.editor?.rt?.doc.kind === k && window.editor.rt.doc.id !== id, ['city', before] as const);
   await expect(page.locator('.save-status')).toHaveText('Saved');
 }
 

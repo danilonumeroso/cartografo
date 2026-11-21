@@ -1187,4 +1187,8 @@ export const IT: Record<string, string> = {
   "The big picture: link places and buildings to their battle maps": "Il quadro d'insieme: collega luoghi ed edifici alle loro mappe di battaglia",
   "inside {name}": "dentro {name}",
   "Linked maps": "Mappe collegate",
+  "Kilometres per hex": "Chilometri per esagono",
+  "Miles per hex": "Miglia per esagono",
+  "Metres per square": "Metri per quadretto",
+  "Size in hexes (the top-left corner stays put)": "Dimensioni in esagoni (l'angolo in alto a sinistra resta fermo)",
 };

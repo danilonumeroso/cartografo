@@ -46,7 +46,10 @@ export function mapSettings(ed: Editor) {
   const cols = h('input', { type: 'number', value: doc.cols, min: MIN_SIZE, max: 80, class: 'num-sm' });
   const rows = h('input', { type: 'number', value: doc.rows, min: MIN_SIZE, max: 80, class: 'num-sm' });
   const grid = h('input', { type: 'color', value: g.color, oninput: () => { g.color = grid.value; ed.changed('objects'); } });
-  const feet = h('input', { type: 'number', value: g.feet, min: 1, max: 100, class: 'num-sm', onchange: () => { g.feet = +feet.value || 5; ed.changed('objects'); } });
+  const kind = doc.kind ?? 'battle', world = kind === 'world';
+  // every setting speaks the map's own scale: feet per square, metres per square or miles per hex
+  const distLabel = world ? (g.unit === 'km' ? t('Kilometres per hex') : t('Miles per hex')) : g.unit === 'm' ? t('Metres per square') : t('Feet per square');
+  const feet = h('input', { type: 'number', value: g.feet, min: 1, max: 100, class: 'num-sm', onchange: () => { g.feet = +feet.value || (world ? 6 : kind === 'city' ? 10 : 5); ed.changed('objects'); } });
   let gen: GenKind = 'dungeon';
   const bgGrid = h('div', { class: 'swatches' }, ...FLOORS.map((f) => h('button', {
     class: 'swatch' + (f === doc.bg ? ' on' : ''), title: texName(f),
@@ -54,18 +57,18 @@ export function mapSettings(ed: Editor) {
   }, h('img', { src: texSwatch(f), alt: '' }), h('span', null, texName(f)))));
   const close = modal(t('Map settings'), h('div', { class: 'settings' },
     h('label', { class: 'field' }, h('span', { class: 'field-label' }, t('Name')), name),
-    h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Size in squares (the top-left corner stays put)')),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, world ? t('Size in hexes (the top-left corner stays put)') : t('Size in squares (the top-left corner stays put)')),
       h('div', { class: 'row' }, cols, h('span', null, '×'), rows, h('button', { class: 'chip-btn', onclick: () => {
         const c = Math.max(MIN_SIZE, Math.min(80, +cols.value || MIN_SIZE)), r = Math.max(MIN_SIZE, Math.min(80, +rows.value || MIN_SIZE));
         cols.value = String(c); rows.value = String(r);
         if (c === doc.cols && r === doc.rows) return;
         ed.rt.resize(c, r); ed.hist.clear(); ed.fitView(); ed.changed('masks'); toast(t('Map resized'));
       } }, t('Apply')))),
-    h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Base terrain')), bgGrid),
-    listPicker<WallStyle>(t('Room walls'), WALL_NAMES, doc.wallStyle, (v) => { doc.wallStyle = v; ed.rt.engine.invalidateAll(); ed.changed('settings'); close(); mapSettings(ed); }, (v) => WALL_SWATCH[v]),
+    world ? null : h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Base terrain')), bgGrid),
+    kind !== 'battle' ? null : listPicker<WallStyle>(t('Room walls'), WALL_NAMES, doc.wallStyle, (v) => { doc.wallStyle = v; ed.rt.engine.invalidateAll(); ed.changed('settings'); close(); mapSettings(ed); }, (v) => WALL_SWATCH[v]),
     h('h3', null, t('Grid')),
     h('div', { class: 'row' }, toggle(t('Show'), g.show, (v) => { g.show = v; ed.changed('objects'); }), toggle(t('Also on the TV'), g.showPlayers, (v) => { g.showPlayers = v; ed.changed('objects'); })),
-    h('div', { class: 'row' }, h('label', { class: 'color-dot' }, grid, h('span', null, t('Color'))), h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, t('Feet per square')), feet)),
+    h('div', { class: 'row' }, h('label', { class: 'color-dot' }, grid, h('span', null, t('Color'))), h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, distLabel), feet)),
     miniSlider(t('Opacity'), g.opacity, 0.05, 1, 0.05, (v) => { g.opacity = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
     h('h3', null, t('Light & fog')),
     miniSlider(t('Ambient darkness'), doc.ambient, 0, 0.95, 0.05, (v) => { doc.ambient = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
