@@ -58,7 +58,7 @@ test('every preset and layout produces connected, bounded dungeons with hidden t
     const [{ MapRuntime }, { newDoc }, D, { pointInPoly }] = await Promise.all(
       ['/src/runtime.ts', '/src/model.ts', '/src/dungeon.ts', '/src/util.ts'].map(p => import(/* @vite-ignore */ p)));
     const problems: string[] = [];
-    for (const preset of D.PRESET_ORDER) for (const layout of ['sparse', 'compact', 'organic']) for (const [C, R] of [[10, 10], [30, 22], [40, 30]]) for (let s = 0; s < 3; s++) {
+    for (const preset of D.PRESET_ORDER) for (const layout of ['auto', 'sparse', 'compact', 'organic', 'hall', 'gallery', 'symmetric']) for (const [C, R] of [[10, 10], [30, 22], [40, 30]]) for (let s = 0; s < 3; s++) {
       const seed = `${preset}-${layout}-${s}`;
       const rt = new MapRuntime(newDoc('t', C, R));
       const stats = D.generateDungeon(rt, { ...D.PRESETS[preset], layout }, seed);
@@ -113,10 +113,14 @@ test('the Layout option changes the arrangement and keeps the seed', async ({ pa
   await openGenerator(page);
   await page.locator('.gen-adv').click();
   const layouts = page.locator('.gen-layouts button');
-  await expect(layouts).toHaveText(['Automatic', 'Sparse', 'Compact', 'Organic']);
+  await expect(layouts).toHaveText(['Automatic', 'Sparse', 'Compact', 'Organic', 'Great hall', 'Gallery', 'Symmetric']);
   await expect(layouts.first()).toHaveClass(/on/);
   const seed = await page.locator('.gen-seed').inputValue();
   const preview = () => page.locator('.gen-preview img').getAttribute('src');
+  // Automatic picks a layout per seed, so start from an explicit one.
+  await layouts.nth(1).click();
+  await expect(layouts.nth(1)).toHaveClass(/on/);
+  await expect(page.locator('.gen-preview')).not.toHaveClass(/busy/);
   const sparse = await preview();
   await layouts.nth(2).click();
   await expect(layouts.nth(2)).toHaveClass(/on/);

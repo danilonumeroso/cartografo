@@ -5,6 +5,11 @@ export function smoothstep(e0: number, e1: number, x: number) {
   return t * t * (3 - 2 * t);
 }
 
+/** Scramble a 32-bit number (murmur3 finaliser): nearby inputs give unrelated outputs. */
+export function mix32(h: number) {
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return h >>> 0;
+}
 export function mulberry32(seed: number) {
   let a = seed >>> 0;
   return () => {

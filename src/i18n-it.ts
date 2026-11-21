@@ -1216,4 +1216,11 @@ export const IT: Record<string, string> = {
   "Mossy crag": "Macigno muschioso",
   "Old spinning wheel": "Vecchio arcolaio",
   "Mourning angel": "Angelo dolente",
+  "Great hall": "Sala grande",
+  "Gallery": "Galleria",
+  "Symmetric": "Simmetrica",
+  "A different layout for every seed, among those that suit the style.": "Una disposizione diversa a ogni seme, tra quelle adatte allo stile.",
+  "A big pillared hall in the middle, the other rooms around it.": "Un grande salone con colonne al centro, le altre stanze intorno.",
+  "A long colonnaded gallery crosses the map, rooms open off both sides.": "Una lunga galleria con colonne attraversa la mappa, le stanze si aprono ai lati.",
+  "Mirror-image plan around a central axis, like a temple or a palace.": "Pianta speculare attorno a un asse centrale, come un tempio o un palazzo.",
 };
