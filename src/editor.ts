@@ -106,6 +106,7 @@ export class Editor {
   private strokeRect: Rect | null = null;
   private masksDirtyForPlayers = false;
   private fogVersion = -1;
+  private fogSnap: HTMLCanvasElement | null = null;
   private saving: Promise<void> | null = null;
   private saveAgain = false;
   channel: Channel;
@@ -416,6 +417,30 @@ export class Editor {
   undo() { this.hist.undo(); this.requestRender(); }
   redo() { this.hist.redo(); this.requestRender(); }
 
+  /** Start a fog edit: keep a copy of the mask so the touched region can be undone. */
+  beginFog() {
+    const f = this.rt.fog;
+    this.fogSnap = makeCanvas(f.mw, f.mh);
+    ctx2d(this.fogSnap).drawImage(f.mask, 0, 0);
+    f.edited = null;
+  }
+  /** Close a fog edit as one undo step (only the touched rectangle is stored). */
+  commitFog(label: string) {
+    const snap = this.fogSnap, f = this.rt.fog, r = f.takeEdit();
+    this.fogSnap = null;
+    if (!snap || !r) return;
+    const before = ctx2d(snap).getImageData(r.x, r.y, r.w, r.h), after = ctx2d(f.mask).getImageData(r.x, r.y, r.w, r.h);
+    const apply = (d: ImageData) => { this.rt.fog.restore(r.x, r.y, d); this.requestRender(); };
+    this.hist.push({ label, undo: () => apply(before), redo: () => apply(after) });
+  }
+  /** Run a one-shot fog change (reveal a room, cover all…) as one undo step. */
+  fogEdit(label: string, fn: () => void) {
+    this.beginFog();
+    fn();
+    this.commitFog(label);
+    this.requestRender();
+  }
+
   private beginMask(keys: string[]) {
     this.maskSnap = new Map();
     for (const k of keys) {
@@ -610,7 +635,8 @@ export class Editor {
         return;
       }
       case 'fog': {
-        if (this.opts.fog.mode === 'room') { this.revealAt(x, y); return; }
+        if (this.opts.fog.mode === 'room') { this.fogEdit(t('Reveal room'), () => this.revealAt(x, y)); return; }
+        this.beginFog();
         this.drag = { kind: 'brush', last: p };
         this.brushAt(x, y);
         return;
@@ -806,6 +832,7 @@ export class Editor {
       case 'brush':
         if (this.tool === 'terrain') this.commitMask(t('Brush'));
         else if (this.tool === 'cave') this.commitMask(t('Cave'));
+        else if (this.tool === 'fog') this.commitFog(this.opts.fog.mode === 'hide' ? t('Cover') : t('Reveal'));
         break;
       case 'scatter': this.commit(t('Props'), d.before); break;
       case 'rect': {
@@ -1000,10 +1027,7 @@ export class Editor {
           fc.drawImage(tmp, rx, ry);
           fc.shadowColor = 'transparent';
           fc.globalCompositeOperation = 'source-over';
-          this.rt.fog.refresh({ x: rx - 10, y: ry - 10, w: rw + 20, h: rh + 20 });
-          this.rt.fog.pending = unionRect(this.rt.fog.pending, { x: rx - 10, y: ry - 10, w: rw + 20, h: rh + 20 });
-          this.rt.fog.changed = true;
-          this.rt.fog.version++;
+          this.rt.fog.touch({ x: rx - 10, y: ry - 10, w: rw + 20, h: rh + 20 });
           this.requestRender();
           return;
         }

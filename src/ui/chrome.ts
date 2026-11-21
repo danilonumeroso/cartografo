@@ -130,8 +130,8 @@ export function renderDock(ed: Editor) {
       bar.append(sep(), miniSlider(t('Brush'), o.fog.size, 0.5, 16, 0.5, (v) => { o.fog.size = v; ed.requestRender(); }, (v) => t('{n} sq.', { n: v })));
     }
     if (ed.tool === 'fog') {
-      bar.append(h('button', { class: 'chip-btn', onclick: () => { ed.rt.fog.fillAll(); ed.requestRender(); } }, t('Cover all')),
-        h('button', { class: 'chip-btn', onclick: () => { ed.rt.fog.clearAll(); ed.requestRender(); } }, t('Reveal all')));
+      bar.append(h('button', { class: 'chip-btn', onclick: () => ed.fogEdit(t('Cover all'), () => ed.rt.fog.fillAll()) }, t('Cover all')),
+        h('button', { class: 'chip-btn', onclick: () => ed.fogEdit(t('Reveal all'), () => ed.rt.fog.clearAll()) }, t('Reveal all')));
     }
     if (ed.tool === 'token') bar.append(sep(), ...tokenOptions(ed));
     return;

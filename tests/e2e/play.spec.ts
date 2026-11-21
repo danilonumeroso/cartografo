@@ -88,6 +88,31 @@ test('room and brush fog reveal, cover and whole-map actions', async ({ page }) 
   }
 });
 
+test('fog edits undo and redo one step at a time', async ({ page }) => {
+  await empty(page);
+  await room(page);
+  await button(page, 'Play').click();
+  await button(page, 'Reveal room').click();
+  await clickMap(page, 800, 600);
+  await button(page, 'Cover').click();
+  await clickMap(page, 800, 600);
+  expect(await alpha(page, 'fog', 800, 600)).toBe(255);
+  await button(page, 'Reveal all').click();
+  expect(await alpha(page, 'fog', 1400, 900)).toBe(0);
+  const undo = page.getByRole('button', { name: 'Undo (Ctrl/Cmd+Z)' });
+  // Reveal all, then the cover dab, then the room reveal come back one by one.
+  await undo.click();
+  expect(await alpha(page, 'fog', 1400, 900)).toBe(255);
+  expect(await alpha(page, 'fog', 800, 600)).toBe(255);
+  await undo.click();
+  expect(await alpha(page, 'fog', 800, 600)).toBe(0);
+  await undo.click();
+  expect(await alpha(page, 'fog', 800, 600)).toBe(255);
+  await page.keyboard.press('ControlOrMeta+Shift+Z');
+  expect(await alpha(page, 'fog', 800, 600)).toBe(0);
+  expect(await alpha(page, 'fog', 1400, 900)).toBe(255);
+});
+
 test('doors align with a grid edge and toggle in Prepare and Play', async ({ page }) => {
   await empty(page);
   await button(page, 'Build').click();

@@ -11,6 +11,8 @@ export class Fog {
   changed = false;
   /** Incremented on every edit, so callers can detect new changes. */
   version = 0;
+  /** Mask-space region touched since the last `takeEdit()`, for undo. */
+  edited: Rect | null = null;
   /** Texture of the covered areas: dark clouds, or parchment on world maps. */
   tex = 'fog';
 
@@ -22,11 +24,13 @@ export class Fog {
   get mw() { return this.mask.width; }
   get mh() { return this.mask.height; }
 
-  private touch(r: Rect) {
+  /** Redraw, broadcast and save a mask-space region after it was edited. */
+  touch(r: Rect) {
     const c = clipRect(r, this.mw, this.mh);
     if (!c) return;
     this.refresh(c);
     this.pending = unionRect(this.pending, c);
+    this.edited = unionRect(this.edited, c);
     this.changed = true;
     this.version++;
   }
@@ -92,6 +96,18 @@ export class Fog {
     this.pending = null;
     if (!r) return null;
     return { x: r.x, y: r.y, data: ctx2d(this.mask).getImageData(r.x, r.y, r.w, r.h) };
+  }
+  /** Region edited since the last call (clipped to the mask), then forget it. */
+  takeEdit(): Rect | null {
+    const r = this.edited && clipRect(this.edited, this.mw, this.mh);
+    this.edited = null;
+    return r || null;
+  }
+  /** Put back a saved region (undo/redo): unlike applyPatch it is also broadcast and saved. */
+  restore(x: number, y: number, data: ImageData) {
+    ctx2d(this.mask).putImageData(data, x, y);
+    this.touch({ x, y, w: data.width, h: data.height });
+    this.edited = null;
   }
   applyPatch(x: number, y: number, data: ImageData) {
     ctx2d(this.mask).putImageData(data, x, y);
