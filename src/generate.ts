@@ -26,14 +26,21 @@ export function generate(rt: MapRuntime, kind: GenKind, seed = Date.now() % 1000
 }
 
 // ------------------------------------------------------------------ cave
+type CaveKind = 'plain' | 'lake' | 'fungal' | 'crystal' | 'ice' | 'lava';
 function cave(b: B) {
   const { doc, r, rt } = b;
-  doc.bg = 'rock'; doc.caveFloor = 'cave'; doc.ambient = 0.6; doc.fogEnabled = true;
+  // every cave has a character: a plain grotto, an underground lake, a mushroom grotto, a crystal
+  // cavern, an ice cave or a lava cave; tight or open passages
+  const kind = pick(r, ['plain', 'plain', 'lake', 'fungal', 'crystal', 'ice', 'lava'] as CaveKind[]);
+  doc.bg = 'rock'; doc.fogEnabled = true;
+  doc.caveFloor = kind === 'ice' ? 'ice' : kind === 'lava' ? pick(r, ['ash', 'obsidian']) : 'cave';
+  doc.ambient = kind === 'fungal' || kind === 'crystal' ? 0.72 : kind === 'lava' ? 0.5 : 0.6;
   const S = 2, gw = doc.cols * S, gh = doc.rows * S;
+  const fill = rrange(r, 0.42, 0.48), passes = rint(r, 4, 6);
   let g = new Uint8Array(gw * gh);
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
     const edge = x < 2 || y < 2 || x >= gw - 2 || y >= gh - 2;
-    g[y * gw + x] = edge || r() < 0.46 ? 1 : 0;
+    g[y * gw + x] = edge || r() < fill ? 1 : 0;
   }
   const wallsAround = (x: number, y: number) => {
     let n = 0;
@@ -44,7 +51,7 @@ function cave(b: B) {
     }
     return n;
   };
-  for (let it = 0; it < 5; it++) {
+  for (let it = 0; it < passes; it++) {
     const ng = new Uint8Array(gw * gh);
     for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
       const n = wallsAround(x, y);
@@ -88,22 +95,32 @@ function cave(b: B) {
   for (let y = 1; y < gh - 1; y++) for (let x = 1; x < gw - 1; x++) if (!g[y * gw + x] && wallsAround(x, y) >= 2 && wallsAround(x, y) <= 4) nearWall.push([(x + 0.5) / S, (y + 0.5) / S]);
   if (!open.length) return;
   const area = open.length / (S * S);
-  for (let k = 0; k < Math.max(1, Math.round(area / 90)); k++) {
-    const [x, y] = pick(r, open);
-    for (let j = 0; j < 4; j++) b.paint('water', x + rrange(r, -0.8, 0.8), y + rrange(r, -0.8, 0.8), rrange(r, 0.7, 1.4), 0.2);
-    b.paint('deep', x, y, 0.6, 0.2);
+  const [ex, ey] = open[0];
+  const farFromEntrance = open.filter(([x, y]) => Math.hypot(x - ex, y - ey) > 6);
+  // pools: water everywhere, a big lake in a lake cave, lava pools in a lava cave
+  const liquid = kind === 'lava' ? 'lava' : 'water';
+  const pools = kind === 'lake' ? 1 : Math.max(1, Math.round(area / 90));
+  for (let k = 0; k < pools; k++) {
+    const [x, y] = pick(r, farFromEntrance.length ? farFromEntrance : open);
+    const big = kind === 'lake' ? rrange(r, 2.5, 4) : 1;
+    for (let j = 0; j < 4 * big; j++) b.paint(liquid, x + rrange(r, -0.8, 0.8) * big, y + rrange(r, -0.8, 0.8) * big, rrange(r, 0.7, 1.4) * Math.sqrt(big), 0.2);
+    if (liquid === 'water') b.paint('deep', x, y, 0.6 * big, 0.2);
+    if (kind === 'lake') { b.stamp('rowboat', x + big * 0.9, y + rrange(r, -0.5, 0.5), r() * 6.28, 0.8); for (let j = 0; j < 4; j++) b.stamp('river_stones', x + rrange(r, -1.5, 1.5) * big, y + rrange(r, -1.2, 1.2) * big, r() * 6.28, 0.8); }
+    if (kind === 'lava') b.stamp('lava_vent', x, y, r() * 6.28, 0.9);
   }
   const crystal = pick(r, ['crystals_blue', 'crystals_red', 'crystals_green', 'crystals']);
-  for (let k = 0; k < area / 12; k++) b.stamp(pick(r, ['stalagmite', 'stalagmite', 'stalagmites', 'rocks', 'boulder']), ...pick(r, nearWall), r() * 6.28, rrange(r, 0.7, 1.2));
-  for (let k = 0; k < area / 40; k++) b.stamp(pick(r, [crystal, 'glowshrooms', 'mushrooms', 'geode']), ...pick(r, nearWall), r() * 6.28);
-  for (let k = 0; k < area / 50; k++) b.stamp(pick(r, ['bones', 'rubble', 'puddle', 'cave_moss', 'glowmoss', 'skulls']), ...pick(r, open), r() * 6.28);
-  for (let k = 0; k < area / 160; k++) b.stamp(pick(r, ['cave_column', 'giant_mushroom', 'bear_den', 'ore_vein']), ...pick(r, open), r() * 6.28);
-  for (let k = 0; k < area / 60; k++) b.paint('moss', ...pick(r, open), rrange(r, 0.8, 1.6), 0.1, 0.6);
-  const [ex, ey] = open[0];
+  const wallProps = kind === 'ice' ? ['ice_spikes', 'ice_spikes', 'snow_drift', 'rocks'] : kind === 'lava' ? ['rocks', 'boulder', 'stalagmite', 'lava_vent'] : ['stalagmite', 'stalagmite', 'stalagmites', 'rocks', 'boulder'];
+  const glowProps = kind === 'fungal' ? ['glowshrooms', 'glowshrooms', 'mushrooms', 'giant_mushroom'] : kind === 'crystal' ? [crystal, crystal, 'geode', 'floating_crystal', 'crystal_tree'] : kind === 'ice' ? ['crystals_blue', 'ice_spikes'] : [crystal, 'glowshrooms', 'mushrooms', 'geode'];
+  const glowK = kind === 'fungal' || kind === 'crystal' ? 14 : 40;
+  for (let k = 0; k < area / 12; k++) b.stamp(pick(r, wallProps), ...pick(r, nearWall), r() * 6.28, rrange(r, 0.7, 1.2));
+  for (let k = 0; k < area / glowK; k++) b.stamp(pick(r, glowProps), ...pick(r, nearWall), r() * 6.28);
+  for (let k = 0; k < area / 50; k++) b.stamp(pick(r, kind === 'ice' ? ['bones', 'snow_drift', 'puddle', 'skulls'] : ['bones', 'rubble', 'puddle', 'cave_moss', 'glowmoss', 'skulls']), ...pick(r, open), r() * 6.28);
+  for (let k = 0; k < area / 160; k++) b.stamp(pick(r, kind === 'fungal' ? ['giant_mushroom', 'giant_mushroom', 'cave_column'] : ['cave_column', 'giant_mushroom', 'bear_den', 'ore_vein']), ...pick(r, open), r() * 6.28);
+  if (kind !== 'lava' && kind !== 'ice') for (let k = 0; k < area / (kind === 'fungal' ? 25 : 60); k++) b.paint('moss', ...pick(r, open), rrange(r, 0.8, 1.6), 0.1, 0.6);
   b.label(t('Entrance'), ex, ey, 30);
 }
 
-// ------------------------------------------------------------------ forest
+// ------------------------------------------------------------------ forest and winter wood
 function noisePath(r: Rng, C: number, R: number, horizontal: boolean): [number, number][] {
   const pts: [number, number][] = [];
   const n = 24;
@@ -115,110 +132,185 @@ function noisePath(r: Rng, C: number, R: number, horizontal: boolean): [number, 
   }
   return pts;
 }
-function forest(b: B) {
+/** A wobbly path through the given points (from map edge to map edge, say). */
+function pathThrough(r: Rng, way: [number, number][]): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 1; i < way.length; i++) {
+    const [ax, ay] = way[i - 1], [bx, by] = way[i], n = Math.max(2, Math.round(Math.hypot(bx - ax, by - ay) / 1.2));
+    for (let k = i === 1 ? 0 : 1; k <= n; k++) { const f = k / n, wob = k > 0 && k < n ? rrange(r, -0.6, 0.6) : 0; out.push([ax + (bx - ax) * f + wob, ay + (by - ay) * f + wob]); }
+  }
+  return out;
+}
+type Woods = { snow: boolean; trees: string[]; undergrowth: string[]; litter: string[] };
+const WOODS: Record<string, Woods> = {
+  mixed: { snow: false, trees: ['tree', 'tree', 'tree', 'birch', 'tree_autumn', 'fruit_tree', 'pine', 'pine', 'cypress'], undergrowth: ['bush', 'bush', 'berry_bush', 'fern', 'flower_bush'], litter: ['tallgrass', 'flowers', 'rocks', 'wildflowers', 'fern', 'stump', 'log', 'mossy_log', 'mushrooms', 'grass_tufts', 'mossy_boulder'] },
+  pine: { snow: false, trees: ['pine', 'pine', 'pine', 'cypress', 'tree'], undergrowth: ['fern', 'fern', 'bush', 'mossy_boulder'], litter: ['fern', 'mossy_log', 'mossy_boulder', 'mushrooms', 'stump', 'rocks', 'roots'] },
+  autumn: { snow: false, trees: ['autumn_maple', 'autumn_maple', 'tree_autumn', 'golden_tree', 'tree', 'birch'], undergrowth: ['bush', 'berry_bush', 'fern'], litter: ['fallen_leaves', 'fallen_leaves', 'mushrooms', 'stump', 'log', 'pumpkins', 'rocks'] },
+  birch: { snow: false, trees: ['birch', 'birch', 'birch', 'tree', 'cherry_tree'], undergrowth: ['flower_bush', 'bush', 'fern'], litter: ['wildflowers', 'flowers', 'tallgrass', 'clover', 'tulips', 'rocks'] },
+  swamp: { snow: false, trees: ['willow', 'willow', 'dead_tree', 'mangrove', 'tree'], undergrowth: ['reeds', 'reeds', 'fern', 'bush'], litter: ['lily_pads', 'mossy_log', 'mushrooms', 'reeds', 'roots', 'fireflies'] },
+  winter: { snow: true, trees: ['snowy_pine', 'snowy_pine', 'snowy_pine', 'pine', 'dead_tree'], undergrowth: ['holly_bush', 'snow_drift', 'rocks'], litter: ['snow_drift', 'snowballs', 'rocks', 'ice_spikes', 'firewood', 'paw_prints'] },
+};
+
+/** A forest (or a snowy wood): one or two clearings, paths, a stream, and something in the main clearing. */
+function woods(b: B, snow: boolean) {
   const { doc, r } = b;
-  doc.bg = 'grass'; doc.ambient = 0; doc.fogEnabled = false;
   const C = doc.cols, R = doc.rows;
-  const cx = C * rrange(r, 0.4, 0.6), cy = R * rrange(r, 0.4, 0.6), clr = Math.min(C, R) * 0.28;
+  const biome = snow ? 'winter' : pick(r, ['mixed', 'mixed', 'pine', 'autumn', 'birch', 'swamp']);
+  const W = WOODS[biome];
+  doc.bg = snow ? 'snow' : biome === 'swamp' ? 'swamp' : 'grass';
+  const dusk = r() < 0.25;
+  doc.ambient = snow ? (dusk ? 0.5 : 0.25) : dusk ? 0.4 : 0; doc.fogEnabled = false;
+  // clearings: the main one, sometimes a second, smaller one
+  const clearings: [number, number, number][] = [[C * rrange(r, 0.3, 0.7), R * rrange(r, 0.35, 0.65), Math.min(C, R) * rrange(r, 0.22, 0.32)]];
+  if (C * R >= 400 && r() < 0.45) {
+    const [mx, my] = clearings[0];
+    for (let tries = 0; tries < 20; tries++) {
+      const x = C * rrange(r, 0.15, 0.85), y = R * rrange(r, 0.2, 0.8);
+      if (Math.hypot(x - mx, y - my) > Math.min(C, R) * 0.45) { clearings.push([x, y, Math.min(C, R) * rrange(r, 0.12, 0.18)]); break; }
+    }
+  }
   const N = fbmTile(256, 4, 4, Math.floor(r() * 9999));
+  const thick = rrange(r, -0.1, 0.12); // denser or sparser woods
   const density = (x: number, y: number) => {
-    const d = Math.hypot((x - cx) / clr, (y - cy) / clr);
-    return Math.max(0, Math.min(1, (d - 0.9) * 1.3)) * 0.8 + sampleWrap(N, 256, x * 8, y * 8) * 0.35 - 0.12;
+    const d = Math.min(...clearings.map(([cx, cy, cr]) => Math.hypot((x - cx) / cr, (y - cy) / cr)));
+    return Math.max(0, Math.min(1, (d - 0.9) * 1.3)) * 0.8 + sampleWrap(N, 256, x * 8, y * 8) * 0.35 - 0.12 + thick;
   };
-  for (let y = 0; y < R; y += 1.5) for (let x = 0; x < C; x += 1.5) if (density(x, y) > 0.45) b.paint('forest', x, y, 1.8, 0.1, 0.5);
-  const path = noisePath(r, C, R, C >= R);
-  b.stroke('dirt', path, 0.9, 0.3);
-  const onPath = (x: number, y: number) => path.some(([px, py]) => Math.hypot(px - x, py - y) < 1.6);
-  const stream = r() < 0.5 ? noisePath(r, C, R, C < R) : null;
-  if (stream) b.stroke('water', stream, 0.7, 0.35);
+  if (!snow) for (let y = 0; y < R; y += 1.5) for (let x = 0; x < C; x += 1.5) if (density(x, y) > 0.45) b.paint(biome === 'autumn' ? 'leaves' : 'forest', x, y, 1.8, 0.1, 0.5);
+  if (biome === 'swamp') for (let k = 0; k < C * R / 60; k++) { const x = rrange(r, 0, C), y = rrange(r, 0, R); b.paint(r() < 0.6 ? 'swampwater' : 'mud', x, y, rrange(r, 0.8, 1.8), 0.3, 0.9); }
+  // paths: none, one through the clearings, or a crossroads
+  const paths: [number, number][][] = [];
+  const pathMode = pick(r, ['one', 'one', 'cross', 'none']);
+  const horizontal = C >= R;
+  if (pathMode !== 'none') {
+    // the path skirts each clearing's middle, where its scene stands
+    const side = r() < 0.5 ? 1 : -1;
+    const stops = clearings.map(([x, y, cr]) => (horizontal ? [x, y + side * cr * 0.7] : [x + side * cr * 0.7, y]) as [number, number]);
+    const way: [number, number][] = horizontal ? [[-0.5, R * rrange(r, 0.3, 0.7)], ...stops.sort((a, c) => a[0] - c[0]), [C + 0.5, R * rrange(r, 0.3, 0.7)]]
+      : [[C * rrange(r, 0.3, 0.7), -0.5], ...stops.sort((a, c) => a[1] - c[1]), [C * rrange(r, 0.3, 0.7), R + 0.5]];
+    paths.push(pathThrough(r, way));
+    if (pathMode === 'cross') paths.push(noisePath(r, C, R, !horizontal));
+  }
+  for (const p of paths) {
+    b.stroke(snow ? 'gravel' : biome === 'swamp' ? 'mud' : 'dirt', p, snow ? 0.75 : 0.9, 0.3);
+    if (snow) for (let k = 0; k < p.length; k += 2) b.paint('snowcover', p[k][0] + rrange(r, -0.4, 0.4), p[k][1] + rrange(r, -0.4, 0.4), rrange(r, 0.3, 0.6), 0.1, 0.5);
+  }
+  const onPath = (x: number, y: number) => paths.some((p) => p.some(([px, py]) => Math.hypot(px - x, py - y) < 1.6));
+  const stream = r() < (snow ? 0.6 : biome === 'swamp' ? 0.3 : 0.5) ? noisePath(r, C, R, !horizontal) : null;
+  if (stream) b.stroke(snow ? 'ice' : 'water', stream, snow ? 0.8 : 0.7, 0.35);
   const onStream = (x: number, y: number) => !!stream && stream.some(([px, py]) => Math.hypot(px - x, py - y) < 1.4);
-  const n = C * R * 0.5;
-  for (let k = 0; k < n; k++) {
+  // bridges where paths cross the stream
+  if (stream) for (const p of paths) {
+    const k = p.findIndex(([px, py]) => stream.some(([sx, sy]) => Math.hypot(sx - px, sy - py) < 0.6));
+    if (k < 0) continue;
+    // the bridge deck runs along the path (the stamp's deck is drawn top to bottom)
+    const [ax, ay] = p[Math.max(0, k - 1)], [bx, by] = p[Math.min(p.length - 1, k + 1)];
+    b.stamp('bridge_wood', p[k][0], p[k][1], Math.atan2(by - ay, bx - ax) - Math.PI / 2, 0.8);
+  }
+  // trees and undergrowth
+  for (let k = 0; k < C * R * 0.5; k++) {
     const x = rrange(r, -0.5, C + 0.5), y = rrange(r, -0.5, R + 0.5);
-    const d = density(x, y);
-    if (r() > d || onPath(x, y) || onStream(x, y)) continue;
-    const t = r();
-    if (t < 0.03) b.stamp('oak_giant', x, y, r() * 6.28, rrange(r, 0.8, 1));
-    else if (t < 0.12) b.stamp('tree_big', x, y, r() * 6.28, rrange(r, 0.8, 1.1));
-    else if (t < 0.55) b.stamp(pick(r, ['tree', 'tree', 'tree', 'birch', r() < 0.3 ? 'tree_autumn' : 'tree', 'fruit_tree']), x, y, r() * 6.28, rrange(r, 0.75, 1.2));
-    else if (t < 0.8) b.stamp(r() < 0.2 ? 'cypress' : 'pine', x, y, r() * 6.28, rrange(r, 0.8, 1.3));
-    else b.stamp(pick(r, ['bush', 'bush', 'berry_bush', 'fern', 'flower_bush']), x, y, r() * 6.28, rrange(r, 0.7, 1.3));
+    if (r() > density(x, y) || onPath(x, y) || onStream(x, y)) continue;
+    const tt = r();
+    if (!snow && tt < 0.03) b.stamp(biome === 'swamp' ? 'willow' : 'oak_giant', x, y, r() * 6.28, rrange(r, 0.8, 1));
+    else if (!snow && biome !== 'swamp' && tt < 0.1) b.stamp(biome === 'autumn' ? 'autumn_maple' : 'tree_big', x, y, r() * 6.28, rrange(r, 0.9, 1.2));
+    else if (tt < 0.8) b.stamp(pick(r, W.trees), x, y, r() * 6.28, rrange(r, 0.75, 1.3));
+    else b.stamp(pick(r, W.undergrowth), x, y, r() * 6.28, rrange(r, 0.7, 1.3));
     k += 3;
   }
+  const [cx, cy] = clearings[0];
   for (let k = 0; k < C * R * 0.02; k++) {
     const x = rrange(r, 0, C), y = rrange(r, 0, R);
-    if (onPath(x, y) || onStream(x, y)) continue;
-    b.stamp(pick(r, ['tallgrass', 'flowers', 'rocks', 'wildflowers', 'fern', 'stump', 'log', 'mossy_log', 'mushrooms', 'fallen_leaves', 'grass_tufts', 'mossy_boulder']), x, y, r() * 6.28, rrange(r, 0.8, 1.2));
+    if (onPath(x, y) || onStream(x, y) || Math.hypot(x - cx, y - cy) < 3.5) continue;
+    b.stamp(pick(r, W.litter), x, y, r() * 6.28, rrange(r, 0.8, 1.2));
   }
   if (stream) for (let k = 0; k < stream.length; k += 3) {
     const [sx, sy] = stream[k];
-    b.stamp(pick(r, ['reeds', 'river_stones', 'lily_pads', 'reeds']), sx + rrange(r, -1, 1), sy + rrange(r, -1, 1), r() * 6.28, rrange(r, 0.7, 1));
+    if (!snow) b.stamp(pick(r, ['reeds', 'river_stones', 'lily_pads', 'reeds']), sx + rrange(r, -1, 1), sy + rrange(r, -1, 1), r() * 6.28, rrange(r, 0.7, 1));
   }
-  if (r() < 0.7) {
-    b.stamp('campfire', cx, cy);
-    b.stamp('log', cx - 1.3, cy, Math.PI / 2); b.stamp('log', cx + 1.3, cy, Math.PI / 2);
-    b.stamp('tent', cx + 2.6, cy - 2, rrange(r, -0.4, 0.4)); b.stamp('tent', cx - 2.6, cy - 2.2, rrange(r, -0.4, 0.4));
-    b.stamp('sacks', cx + 1.5, cy + 1.6); b.stamp('chest', cx - 1.6, cy + 1.6);
-    b.stamp('bedroll', cx + 0.4, cy + 2.4, Math.PI / 2 + rrange(r, -0.3, 0.3)); b.stamp('firewood', cx - 2.6, cy + 0.4, Math.PI / 2);
-  } else if (r() < 0.5) {
-    b.stamp('stone_circle', cx, cy);
-    b.stamp('fairy_ring', cx + 3.5, cy + 2.5, 0, 0.8);
-  } else {
-    b.stamp('menhir', cx, cy - 2); b.stamp('menhir', cx + 2, cy); b.stamp('menhir', cx, cy + 2); b.stamp('menhir', cx - 2, cy);
-    b.stamp('altar', cx, cy, 0, 0.8);
-  }
+  // what the main clearing holds (the second clearing gets something small)
+  const scenes = snow ? ['festive', 'frozen', 'lodge', 'wolves', 'caravan', 'ruins'] : ['camp', 'camp', 'stones', 'menhirs', 'ruins', 'cabin', 'ambush', 'woodcutters', 'pond', 'shrine'];
+  clearingScene(b, pick(r, scenes), cx, cy, snow);
+  if (clearings[1]) clearingScene(b, pick(r, snow ? ['wolves', 'frozen'] : ['stones', 'shrine', 'pond', 'woodcutters']), clearings[1][0], clearings[1][1], snow);
 }
 
-// ------------------------------------------------------------------ winter
-function winter(b: B) {
-  const { doc, r } = b;
-  doc.bg = 'snow'; doc.ambient = 0.25; doc.fogEnabled = false;
-  const C = doc.cols, R = doc.rows;
-  const cx = C * rrange(r, 0.42, 0.58), cy = R * rrange(r, 0.42, 0.58), clr = Math.min(C, R) * 0.3;
-  const N = fbmTile(256, 4, 4, Math.floor(r() * 9999));
-  const density = (x: number, y: number) => {
-    const d = Math.hypot((x - cx) / clr, (y - cy) / clr);
-    return Math.max(0, Math.min(1, (d - 0.9) * 1.3)) * 0.8 + sampleWrap(N, 256, x * 8, y * 8) * 0.35 - 0.12;
-  };
-  const path = noisePath(r, C, R, C >= R);
-  b.stroke('gravel', path, 0.75, 0.25);
-  for (let k = 0; k < path.length; k += 2) b.paint('snowcover', path[k][0] + rrange(r, -0.4, 0.4), path[k][1] + rrange(r, -0.4, 0.4), rrange(r, 0.3, 0.6), 0.1, 0.5);
-  const onPath = (x: number, y: number) => path.some(([px, py]) => Math.hypot(px - x, py - y) < 1.5);
-  const stream = r() < 0.6 ? noisePath(r, C, R, C < R) : null;
-  if (stream) b.stroke('ice', stream, 0.8, 0.35);
-  const onStream = (x: number, y: number) => !!stream && stream.some(([px, py]) => Math.hypot(px - x, py - y) < 1.4);
-  const n = C * R * 0.5;
-  for (let k = 0; k < n; k++) {
-    const x = rrange(r, -0.5, C + 0.5), y = rrange(r, -0.5, R + 0.5);
-    if (r() > density(x, y) || onPath(x, y) || onStream(x, y)) continue;
-    const t = r();
-    if (t < 0.6) b.stamp('snowy_pine', x, y, r() * 6.28, rrange(r, 0.8, 1.3));
-    else if (t < 0.75) b.stamp('pine', x, y, r() * 6.28, rrange(r, 0.8, 1.2));
-    else if (t < 0.85) b.stamp('dead_tree', x, y, r() * 6.28, rrange(r, 0.7, 1));
-    else b.stamp(pick(r, ['holly_bush', 'snow_drift', 'rocks']), x, y, r() * 6.28, rrange(r, 0.8, 1.2));
-    k += 3;
-  }
-  for (let k = 0; k < C * R * 0.015; k++) {
-    const x = rrange(r, 0, C), y = rrange(r, 0, R);
-    if (onPath(x, y) || onStream(x, y) || Math.hypot(x - cx, y - cy) < 4) continue;
-    b.stamp(pick(r, ['snow_drift', 'snowballs', 'rocks', 'ice_spikes', 'firewood', 'paw_prints']), x, y, r() * 6.28, rrange(r, 0.8, 1.1));
-  }
-  if (r() < 0.65) {
-    // a festive camp around a decorated tree
-    b.stamp('xmas_tree', cx, cy - 0.5);
-    b.stamp('presents', cx + 1.4, cy + 0.6, r() * 6.28); b.stamp('presents', cx - 1.3, cy + 0.8, r() * 6.28, 0.8);
-    b.stamp('campfire', cx, cy + 2.6);
-    b.stamp('log', cx - 1.4, cy + 2.6, Math.PI / 2); b.stamp('log', cx + 1.4, cy + 2.6, Math.PI / 2);
-    b.stamp('snowman', cx + 3, cy - 1.5, rrange(r, -0.3, 0.3)); b.stamp('sled', cx - 3, cy + 1.5, rrange(r, -0.6, 0.6));
-    b.stamp('winter_lantern', cx - 2.2, cy - 1.8); b.stamp('winter_lantern', cx + 2.2, cy + 3.6);
-    b.stamp('hot_cocoa', cx + 0.6, cy + 3.5, r() * 6.28);
-  } else {
-    b.stamp('frozen_pond', cx, cy, r() * 6.28);
-    b.stamp('snowman', cx + 2.8, cy + 1.8, rrange(r, -0.3, 0.3)); b.stamp('snowman', cx - 2.6, cy - 1.6, rrange(r, -0.3, 0.3), 0.8);
-    b.stamp('sled', cx - 2.8, cy + 2, rrange(r, -0.6, 0.6)); b.stamp('snowballs', cx + 2, cy - 2.2);
-    b.stamp('winter_lantern', cx, cy - 2.6);
+/** Dress a clearing around (cx, cy). */
+function clearingScene(b: B, scene: string, cx: number, cy: number, snow: boolean) {
+  const { r, doc } = b;
+  const st = (type: string, dx: number, dy: number, rot = r() * 6.28, scale = 1) => b.stamp(type, cx + dx, cy + dy, rot, scale);
+  switch (scene) {
+    case 'camp':
+      st('campfire', 0, 0); st('log', -1.3, 0, Math.PI / 2); st('log', 1.3, 0, Math.PI / 2);
+      st('tent', 2.6, -2, rrange(r, -0.4, 0.4)); if (r() < 0.6) st('tent', -2.6, -2.2, rrange(r, -0.4, 0.4));
+      st('sacks', 1.5, 1.6); st('chest', -1.6, 1.6); st('bedroll', 0.4, 2.4, Math.PI / 2 + rrange(r, -0.3, 0.3)); st('firewood', -2.6, 0.4, Math.PI / 2);
+      break;
+    case 'stones': st('stone_circle', 0, 0, 0); st('fairy_ring', 3.5, 2.5, 0, 0.8); break;
+    case 'menhirs':
+      for (let k = 0, n = rint(r, 4, 6); k < n; k++) { const a = (k / n) * Math.PI * 2; st('menhir', Math.cos(a) * 2.2, Math.sin(a) * 2.2, a); }
+      st(pick(r, ['altar', 'sacrificial_altar', 'totem']), 0, 0, 0, 0.8);
+      break;
+    case 'ruins': {
+      // the broken walls of a small building, a fallen column, rubble
+      const w = rint(r, 4, 6), h = rint(r, 3, 5);
+      for (let k = 0.5; k < w; k++) { if (r() < 0.7) st('stone_wall', -w / 2 + k, -h / 2, 0, 0.9); if (r() < 0.45) st('stone_wall', -w / 2 + k, h / 2, 0, 0.9); }
+      for (let k = 0.5; k < h; k++) { if (r() < 0.6) st('stone_wall', -w / 2, -h / 2 + k, Math.PI / 2, 0.9); if (r() < 0.5) st('stone_wall', w / 2, -h / 2 + k, Math.PI / 2, 0.9); }
+      st('pillar_broken', rrange(r, -1, 1), rrange(r, -1, 1)); st('rubble', rrange(r, -1.5, 1.5), rrange(r, -1, 1));
+      st(pick(r, ['statue_angel', 'shrine', 'statue']), 0, 0, 0, 0.8);
+      if (snow) st('snow_drift', w / 2 - 0.5, h / 2 - 0.5); else b.paint('moss', cx, cy, 1.6, 0.1, 0.6);
+      break;
+    }
+    case 'cabin': case 'lodge': {
+      const w = rint(r, 4, 5), h = rint(r, 3, 4), x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+      b.room(x, y, w, h, 'wornplanks', snow ? t('Hunting lodge') : t('Hunter’s cabin'));
+      doc.wallStyle = 'wood';
+      b.door(x + Math.floor(w / 2) + 0.5, y + h, false);
+      b.stamp('fireplace', x + 0.45, y + h / 2, Math.PI / 2, 0.9);
+      b.stamp(pick(r, ['bed_straw', 'bed']), x + w - 0.8, y + 1.1, 0, 0.85);
+      b.stamp('table', x + w / 2 - 0.3, y + h / 2, 0, 0.7);
+      b.stamp(pick(r, ['chest', 'barrel', 'sacks']), x + w - 0.6, y + h - 0.6, 0, 0.8);
+      b.stamp('firewood', x - 0.8, y + h - 0.6, Math.PI / 2);
+      b.stamp(snow ? 'sled' : 'chopping_block', x + w + 0.9, y + h - 0.6, r() * 6.28, 0.9);
+      break;
+    }
+    case 'ambush':
+      st('cart', 0, 0, rrange(r, -1, 1)); st(pick(r, ['crate', 'barrels', 'sacks']), 1.6, 0.8); st(pick(r, ['crate', 'barrel']), -1.4, 1.2);
+      st('arrows_stuck', 0.6, -1.2); st('arrows_stuck', -0.8, -0.6); st('blood', 0.4, 1.8); st('weapon_pile', -2, -1.4, r() * 6.28, 0.8);
+      break;
+    case 'woodcutters':
+      for (let k = 0; k < 6; k++) st('stump', rrange(r, -3, 3), rrange(r, -2.5, 2.5));
+      st('lumber', -1.2, 0.6, rrange(r, -0.3, 0.3)); st('sawhorse', 1.2, -0.4); st('firewood', 1.8, 1.4); st('log', -2.2, -1.6, r() * 6.28); st('chopping_block', 0.4, 1.6);
+      break;
+    case 'pond':
+      for (let k = 0; k < 6; k++) b.paint('water', cx + rrange(r, -1.2, 1.2), cy + rrange(r, -0.8, 0.8), rrange(r, 1, 1.6), 0.3, 1);
+      b.paint('deep', cx, cy, 0.9, 0.3);
+      st('reeds', -2.2, 0.8); st('reeds', 2, -1); st('lily_pads', 0.6, 0.3, 0, 0.9);
+      if (r() < 0.5) st('rowboat', 1.6, 1.4, r() * 6.28, 0.7); else st('river_stones', -1.6, -1.2);
+      break;
+    case 'shrine':
+      st(pick(r, ['shrine', 'statue_angel', 'totem']), 0, 0, 0, 0.9); st('fireflies', 1.5, -1); st('fireflies', -1.4, 1.2);
+      for (let k = 0; k < 5; k++) st(pick(r, ['flowers', 'wildflowers', 'tulips', 'lavender']), rrange(r, -2, 2), rrange(r, -2, 2));
+      break;
+    case 'festive':
+      st('xmas_tree', 0, -0.5, 0); st('presents', 1.4, 0.6); st('presents', -1.3, 0.8, r() * 6.28, 0.8);
+      st('campfire', 0, 2.6, 0); st('log', -1.4, 2.6, Math.PI / 2); st('log', 1.4, 2.6, Math.PI / 2);
+      st('snowman', 3, -1.5, rrange(r, -0.3, 0.3)); st('sled', -3, 1.5, rrange(r, -0.6, 0.6));
+      st('winter_lantern', -2.2, -1.8, 0); st('winter_lantern', 2.2, 3.6, 0); st('hot_cocoa', 0.6, 3.5);
+      break;
+    case 'frozen':
+      st('frozen_pond', 0, 0); st('snowman', 2.8, 1.8, rrange(r, -0.3, 0.3)); st('snowman', -2.6, -1.6, rrange(r, -0.3, 0.3), 0.8);
+      st('sled', -2.8, 2, rrange(r, -0.6, 0.6)); st('snowballs', 2, -2.2); st('winter_lantern', 0, -2.6, 0);
+      break;
+    case 'wolves':
+      st('bear_den', 0, 0, r() * 6.28, 0.9); for (let k = 0; k < 4; k++) st(pick(r, ['bones', 'paw_prints', 'paw_prints', 'skulls']), rrange(r, -2.5, 2.5), rrange(r, -2, 2));
+      st('snow_drift', 2, -1.5);
+      break;
+    case 'caravan':
+      st('covered_wagon', 0, 0, rrange(r, -0.4, 0.4)); st('cookfire', 0, 2.2, 0); st('bedroll', -1.4, 2.6, Math.PI / 2); st('bedroll', 1.4, 2.6, Math.PI / 2);
+      st('crate', 2.2, -0.6); st('barrel', -2.2, -0.4); st('snow_drift', -2.8, -1.6);
+      break;
   }
 }
+function forest(b: B) { woods(b, false); }
+function winter(b: B) { woods(b, true); }
 
 // ------------------------------------------------------------------ tavern
 function tavern(b: B) {
