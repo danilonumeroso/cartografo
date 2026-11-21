@@ -6,7 +6,7 @@ import { seedNumber } from './dungeon';
 import { clamp, ctx2d, makeCanvas, mulberry32, pick, rint, Rng, rrange, smoothstep, uid } from './util';
 import { t } from './i18n';
 
-export type WorldShape = 'continent' | 'archipelago' | 'twin' | 'coast';
+export type WorldShape = 'fractal' | 'continent' | 'archipelago' | 'twin' | 'coast';
 export interface WorldParams {
   shape: WorldShape;
   /** Share of the map covered by land, 0.2..0.7. */
@@ -18,7 +18,7 @@ export interface WorldParams {
   rivers: number;
   roads: boolean;
 }
-export const DEFAULT_WORLD: WorldParams = { shape: 'continent', land: 0.42, climate: 0.5, settlements: 2, rivers: 2, roads: true };
+export const DEFAULT_WORLD: WorldParams = { shape: 'fractal', land: 0.42, climate: 0.5, settlements: 2, rivers: 2, roads: true };
 export interface WorldStats { landPct: number; settlements: number; rivers: number; mountains: number; realm: string }
 
 /** Samples of the height field per map cell. */
@@ -111,6 +111,37 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
     }
     return best;
   };
+  // ---- fractal worlds: the classic fault algorithm. Hundreds of random cuts (straight faults and round
+  // basins) each raise one side and lower the other; their sum is a self-similar relief whose coasts,
+  // gulfs and island chains look like a real planet's, wherever the sea level falls.
+  let fault: Float32Array | null = null;
+  if (params.shape === 'fractal') {
+    fault = new Float32Array(gw * gh);
+    const cuts = 420;
+    for (let k = 0; k < cuts; k++) {
+      const d = 1 - (k / cuts) * 0.6, px = rrange(r, -0.1, 1.1) * gw, py = rrange(r, -0.1, 1.1) * gh;
+      if (r() < 0.55) {
+        const a = r() * Math.PI * 2, nx = Math.cos(a), ny = Math.sin(a);
+        for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) fault[y * gw + x] += (x - px) * nx + (y - py) * ny > 0 ? d : -d;
+      } else {
+        const rad = rrange(r, 0.08, 0.45) * Math.max(gw, gh), rad2 = rad * rad, up = r() < 0.5 ? d : -d;
+        for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) fault[y * gw + x] += (x - px) ** 2 + (y - py) ** 2 < rad2 ? up : -up * 0.25;
+      }
+    }
+    // round off the cut lines a little, then scale to 0..1
+    for (let pass = 0; pass < 2; pass++) {
+      const o = new Float32Array(gw * gh);
+      for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+        let s2 = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < gw && Y < gh) { s2 += fault[Y * gw + X]; n++; } }
+        o[y * gw + x] = s2 / n;
+      }
+      fault = o;
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (const v of fault) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    for (let i = 0; i < fault.length; i++) fault[i] = (fault[i] - lo) / (hi - lo || 1);
+  }
   const h = new Float32Array(gw * gh);
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
     const u0 = x / gw, v0 = y / gh;
@@ -118,6 +149,12 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
     const fine = sampleWrap(N2, 256, ox + x * k * 2, oy + y * k * 2);
     let n = sampleWrap(N1, 256, ox + x * k, oy + y * k) * 0.8 + fine * 0.2;
     let shape: number;
+    if (fault) {
+      // fractal relief, roughened by the noise; a soft band of sea keeps the map's edges mostly open water
+      const edgeF = Math.min(u0, v0, 1 - u0, 1 - v0);
+      h[idx(x, y)] = fault[idx(x, y)] * 0.8 + n * 0.25 + ridgeAt(u, v) * 0.12 - (1 - smoothstep(0, 0.07, edgeF)) * 0.35;
+      continue;
+    }
     if (params.shape === 'coast') {
       const side = [u, 1 - u, v, 1 - v][coastSide];
       shape = 1 - clamp((side - 0.05) * 1.3, 0, 1);

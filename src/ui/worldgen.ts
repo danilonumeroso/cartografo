@@ -11,16 +11,17 @@ import { iconBtn } from './common';
 
 /** World sizes in cells (a cell is one hex of travel, 6 miles by default). */
 export const WORLD_SIZES: [() => string, number, number][] = [[() => t('Small'), 36, 24], [() => t('Medium'), 48, 32], [() => t('Large'), 64, 42]];
-const SHAPES: WorldShape[] = ['continent', 'twin', 'archipelago', 'coast'];
-const shapeName = (s: WorldShape) => ({ continent: t('Continent'), twin: t('Two lands'), archipelago: t('Archipelago'), coast: t('Coastline') })[s];
-const shapeIcon = (s: WorldShape) => ({ continent: 'map', twin: 'copy', archipelago: 'dice', coast: 'roomPoly' })[s];
+const SHAPES: WorldShape[] = ['fractal', 'continent', 'twin', 'archipelago', 'coast'];
+const shapeName = (s: WorldShape) => ({ fractal: t('Fractal'), continent: t('Continent'), twin: t('Two lands'), archipelago: t('Archipelago'), coast: t('Coastline') })[s];
+const shapeIcon = (s: WorldShape) => ({ fractal: 'cave', continent: 'map', twin: 'copy', archipelago: 'dice', coast: 'roomPoly' })[s];
 const shapeDesc = (s: WorldShape) => ({
+  fractal: t('Continents and islands shaped by fractal faults, like a real planet: every seed a new geography.'),
   continent: t('One large landmass surrounded by sea.'),
   twin: t('Two lands facing each other across a strait.'),
   archipelago: t('Many islands of every size.'),
   coast: t('Mainland on one side, open sea on the other.'),
 })[s];
-const LAND_BY_SHAPE: Record<WorldShape, number> = { continent: 0.42, twin: 0.4, archipelago: 0.3, coast: 0.5 };
+const LAND_BY_SHAPE: Record<WorldShape, number> = { fractal: 0.4, continent: 0.42, twin: 0.4, archipelago: 0.3, coast: 0.5 };
 const level = (n: number) => [t('None'), t('Few'), t('Some'), t('Many'), t('Lots')][Math.max(0, Math.min(4, Math.round(n)))];
 const VARIANTS = 5;
 
