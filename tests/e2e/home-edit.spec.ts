@@ -96,13 +96,14 @@ test('furnish filters tiles and places the selected prop', async ({ page }) => {
   await button(page, 'Furnish').click();
   const cats = await page.locator('.drawer .chips button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')));
   expect(cats).toEqual(['All', 'Furniture', 'Kitchen & tavern', 'Workshop & forge', 'Magic & alchemy', 'Temple & graveyard', 'Dungeon', 'Caves', 'Nature',
-    'Town & farm', 'Camp & war', 'Docks & ships', 'Treasure', 'Christmas & winter', 'Fey & wonders', 'Clutter', 'Lights', 'My assets']);
+    'Town & farm', 'Camp & war', 'Docks & ships', 'Treasure', 'Christmas & winter', 'Fey & wonders', 'Clutter', 'Realistic', 'Lights', 'My assets']);
   await button(page, 'Lights').click();
   await expect(button(page, 'Invisible light')).toBeVisible();
   await page.getByLabel('Search props').fill('bArReL');
   await expect(button(page, 'Barrel')).toBeVisible();
   // Search also matches tags (a cask is a barrel), but never unrelated props.
   await expect(button(page, 'Cask')).toBeVisible();
+  await expect(button(page, 'Oak barrel')).toBeVisible();
   await expect(button(page, 'Table')).toHaveCount(0);
   await button(page, 'Barrel').click();
   await clickMap(page, 1050, 350);

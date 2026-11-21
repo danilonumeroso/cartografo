@@ -20,10 +20,12 @@ import { FANTASY } from './packs/fantasy';
 import { DECOR } from './packs/decor';
 import { EXTRAS } from './packs/extras';
 import { WORLD } from './packs/world';
+import { REAL } from './packs/real';
+import { propPhoto } from './photos';
 
 export type { StampDef } from './art';
 
-export const CATEGORIES = ['furniture', 'kitchen', 'workshop', 'arcane', 'temple', 'dungeon', 'caves', 'nature', 'town', 'camp', 'nautical', 'treasure', 'christmas', 'fantasy', 'decor'] as const;
+export const CATEGORIES = ['furniture', 'kitchen', 'workshop', 'arcane', 'temple', 'dungeon', 'caves', 'nature', 'town', 'camp', 'nautical', 'treasure', 'christmas', 'fantasy', 'decor', 'real'] as const;
 /** Library categories offered on world/region maps. */
 export const WORLD_CATEGORIES = ['w_terrain', 'w_places', 'w_sea'] as const;
 export const categoryName = (c: string) => ({
@@ -31,12 +33,12 @@ export const categoryName = (c: string) => ({
   furniture: t('Furniture'), kitchen: t('Kitchen & tavern'), workshop: t('Workshop & forge'), arcane: t('Magic & alchemy'),
   temple: t('Temple & graveyard'), dungeon: t('Dungeon'), caves: t('Caves'), nature: t('Nature'), town: t('Town & farm'),
   camp: t('Camp & war'), nautical: t('Docks & ships'), treasure: t('Treasure'), christmas: t('Christmas & winter'),
-  fantasy: t('Fey & wonders'), decor: t('Clutter'),
+  fantasy: t('Fey & wonders'), decor: t('Clutter'), real: t('Realistic'),
 } as Record<string, string>)[c] || c;
 
 export const STAMP_PAD = 16;
 
-const ALL: StampDef[] = [...CLASSIC, ...FURNITURE, ...KITCHEN, ...WORKSHOP, ...ARCANE, ...TEMPLE, ...DUNGEON, ...CAVES, ...NATURE, ...TOWN, ...CAMP, ...NAUTICAL, ...TREASURE, ...CHRISTMAS, ...FANTASY, ...DECOR, ...EXTRAS, ...WORLD];
+const ALL: StampDef[] = [...CLASSIC, ...FURNITURE, ...KITCHEN, ...WORKSHOP, ...ARCANE, ...TEMPLE, ...DUNGEON, ...CAVES, ...NATURE, ...TOWN, ...CAMP, ...NAUTICAL, ...TREASURE, ...CHRISTMAS, ...FANTASY, ...DECOR, ...EXTRAS, ...REAL, ...WORLD];
 const order = new Map<string, number>([...CATEGORIES, ...WORLD_CATEGORIES].map((c, i) => [c, i]));
 /** All built-in stamps, grouped by category (stable within a category). */
 export const STAMPS: StampDef[] = ALL.map((s, i) => [s, i] as const)
@@ -59,14 +61,26 @@ export function stampImage(id: string, variant: number): HTMLCanvasElement | nul
     c.scale(RES, RES);
     c.translate(STAMP_PAD + w / 2, STAMP_PAD + h / 2);
     c.lineJoin = 'round'; c.lineCap = 'round';
-    def.draw(c, mulberry32((variant % VARIANTS) * 7919 + id.length * 131 + 1), w, h);
+    const rng = mulberry32((variant % VARIANTS) * 7919 + id.length * 131 + 1);
+    const ph = def.photo, im = ph ? propPhoto(ph.files[(variant % VARIANTS) % ph.files.length]) : null;
+    if (ph && im) {
+      // rendered model: life size times e (one cell is 5 ft = 1.524 m), centred, shadow baked in
+      const k = (ph.e * CELL) / (1.524 * ph.ppm);
+      c.drawImage(im, (-im.naturalWidth * k) / 2, (-im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k);
+      ph.over?.(c, rng, w, h);
+    } else (ph ? STAMP_BY_ID.get(ph.like) ?? def : def).draw(c, rng, w, h);
     cache.set(key, cv);
   }
   return cv;
 }
 
+/** Every prop render file, for the startup loader. */
+export const PROP_FILES = STAMPS.flatMap((s) => s.photo?.files ?? []);
+
 export function stampThumb(id: string, size = 56): string {
-  const img = stampImage(id, 0)!;
+  // a rendered prop fills its tile on its own: its box is sized for the largest variant
+  const ph = STAMP_BY_ID.get(id)?.photo;
+  const img: CanvasImageSource & { width: number; height: number } = (ph && propPhoto(ph.files[0])) || stampImage(id, 0)!;
   const c = makeCanvas(size, size);
   const x = ctx2d(c);
   const k = Math.min(size / img.width, size / img.height) * 0.95;

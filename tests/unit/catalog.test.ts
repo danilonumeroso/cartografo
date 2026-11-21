@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { CATEGORIES, STAMP_BY_ID, STAMPS, WORLD_CATEGORIES } from '../../src/stamps';
 import { TEXTURES, WALL_TEXTURES } from '../../src/textures';
@@ -34,6 +35,16 @@ it('gives every stamp a known category, a sane size, layer and light', () => {
   }
   // Every category has something in it.
   for (const c of [...CATEGORIES, ...WORLD_CATEGORIES]) expect(STAMPS.some((s) => s.cat === c), c).toBe(true);
+});
+
+it('ships every rendered prop file and a painted fallback for it', () => {
+  const photos = STAMPS.filter((s) => s.photo);
+  expect(photos.length).toBeGreaterThan(20);
+  for (const s of photos) {
+    expect(s.cat, s.id).toBe('real');
+    expect(STAMP_BY_ID.get(s.photo!.like)?.photo, `${s.id} falls back to ${s.photo!.like}`).toBeUndefined();
+    for (const f of s.photo!.files) expect(existsSync(`public/props/${f}`), f).toBe(true);
+  }
 });
 
 it('defines textures and wall styles consistently', () => {

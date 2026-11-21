@@ -21,7 +21,7 @@ function remember(id: string) {
 }
 const CAT_ICON: Record<string, string> = {
   all: '✦', recent: '🕘', furniture: '🪑', kitchen: '🍺', workshop: '⚒️', arcane: '🔮', temple: '🕯️', dungeon: '⛓️', caves: '💎', nature: '🌳', town: '🏘️',
-  camp: '⛺', nautical: '⚓', treasure: '💰', christmas: '🎄', fantasy: '🍄', decor: '🦴', lights: '💡', mine: '🖼️',
+  camp: '⛺', nautical: '⚓', treasure: '💰', christmas: '🎄', fantasy: '🍄', decor: '🦴', real: '🪨', lights: '💡', mine: '🖼️',
   w_terrain: '⛰️', w_places: '🏰', w_sea: '🧭',
 };
 const catLabel = (c: string) => c === 'all' ? t('All') : c === 'recent' ? t('Recent') : c === 'lights' ? t('Lights') : c === 'mine' ? t('My assets') : categoryName(c);

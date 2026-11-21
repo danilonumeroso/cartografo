@@ -16,14 +16,15 @@ export const PHOTO_GROUND: Record<string, { file: string; repeat: number; filter
 export const PHOTO_ROOF: Record<string, string> = { tile: 'roof_tile.jpg', slate: 'roof_slate.jpg', thatch: 'roof_thatch.jpg', wood: 'roof_wood.jpg', copper: 'roof_slate.jpg' };
 
 const images = new Map<string, HTMLImageElement>();
+const props = new Map<string, HTMLImageElement>();
 const roofGrain = new Map<string, HTMLCanvasElement>();
 
-function load(file: string): Promise<HTMLImageElement | null> {
+function load(file: string, base = BASE): Promise<HTMLImageElement | null> {
   return new Promise((res) => {
     const im = new Image();
     im.onload = () => res(im);
     im.onerror = () => res(null);
-    im.src = BASE + file;
+    im.src = base + file;
   });
 }
 
@@ -44,9 +45,11 @@ function grain(im: HTMLImageElement): HTMLCanvasElement {
 }
 
 let ready: Promise<void> | null = null;
-/** Load every photo texture; resolves even when some (or all) are missing. */
-export function loadPhotos(): Promise<void> {
+/** Load every photo texture and prop render; resolves even when some (or all) are missing. */
+export function loadPhotos(propFiles: string[] = []): Promise<void> {
+  const PROPS = import.meta.env.BASE_URL + 'props/';
   ready ??= Promise.all([
+    ...propFiles.map(async (f) => { const im = await load(f, PROPS); if (im) props.set(f, im); }),
     ...Object.entries(PHOTO_GROUND).map(async ([id, d]) => { const im = await load(d.file); if (im) images.set(id, im); }),
     ...Object.entries(PHOTO_ROOF).map(async ([id, f]) => { const im = await load(f); if (im) roofGrain.set(id, grain(im)); }),
   ]).then(() => undefined);
@@ -65,3 +68,5 @@ export function drawPhotoGround(id: string, ctx: CanvasRenderingContext2D, size:
 }
 
 export const roofGrainFor = (roof: string) => roofGrain.get(roof) ?? null;
+/** A rendered prop image, once loaded. */
+export const propPhoto = (file: string) => props.get(file) ?? null;

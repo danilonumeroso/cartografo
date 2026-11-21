@@ -1,6 +1,7 @@
 import './style.css';
 import { preloadTextures } from './textures';
 import { loadPhotos } from './photos';
+import { PROP_FILES } from './stamps';
 import { nextFrame } from './util';
 import { t } from './i18n';
 
@@ -12,7 +13,7 @@ if (loaderText) loaderText.textContent = t('Preparing brushes and parchment…')
 (async () => {
   await nextFrame();
   // photo textures replace painted ones, so they must be in before the first texture is built
-  await Promise.race([loadPhotos(), new Promise((r) => setTimeout(r, 4000))]);
+  await Promise.race([loadPhotos(PROP_FILES), new Promise((r) => setTimeout(r, 4000))]);
   preloadTextures();
   if (new URLSearchParams(location.search).has('player')) {
     const { Player } = await import('./player');

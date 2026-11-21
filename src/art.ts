@@ -18,6 +18,12 @@ export interface StampDef {
   tags?: string;
   /** Drawn for world/region maps instead of battle maps. */
   world?: boolean;
+  /**
+   * Rendered CC0 model (public/props, see CREDITS.md): one file per variant, rendered at `ppm` pixels
+   * per metre and drawn `e` times life size. `like` names the painted stamp drawn when the file is
+   * missing; `over` is painted on top of the photo (flames, glints).
+   */
+  photo?: { files: string[]; ppm: number; e: number; like: string; over?: Draw };
   draw: Draw;
 }
 
