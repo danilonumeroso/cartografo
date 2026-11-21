@@ -40,7 +40,16 @@ export class Fog {
     c.save();
     c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
     c.clearRect(r.x, r.y, r.w, r.h);
-    fillPattern(c, getTexture(this.tex), 0, 0, this.mw, this.mh, this.tex === 'fog' ? 0.5 : 1);
+    // Two copies of the texture at unrelated scales, plus slow light and dark swells, so the clouds never
+    // show the regular grid of a repeated tile (the TV shows big stretches of fog).
+    const tex = getTexture(this.tex), k = this.tex === 'fog' ? 1 : 0.8;
+    fillPattern(c, tex, 0, 0, this.mw, this.mh, 0.9 * k);
+    c.globalAlpha = 0.5;
+    fillPattern(c, tex, 137, 59, this.mw, this.mh, 1.53 * k);
+    c.globalAlpha = this.tex === 'fog' ? 0.7 : 0.35;
+    c.globalCompositeOperation = 'soft-light';
+    fillPattern(c, getTexture('variation'), 211, 97, this.mw, this.mh, 3.1);
+    c.globalAlpha = 1;
     c.globalCompositeOperation = 'destination-in';
     c.drawImage(this.mask, 0, 0);
     c.restore();
