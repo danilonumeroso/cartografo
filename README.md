@@ -2,7 +2,7 @@
 
 Painted-style D&D battle map editor that runs in the browser, with a player view for your TV, fog of war and initiative tracking.
 
-> The interface is available in English (default) and Italian — switch language from the ⋯ menu.
+> The interface is available in English and Italian: it starts in your browser's language, and you can switch from the ⋯ menu.
 
 ## Getting started
 
@@ -16,6 +16,10 @@ For a static build (deployable to any static host, or served locally with `npm r
 ```bash
 npm run build      # output in dist/
 ```
+
+The build uses relative paths, so it also works from a sub-folder. Every push to `main` publishes it on
+GitHub Pages through `.github/workflows/pages.yml` (enable it once under Settings → Pages → Source: GitHub Actions).
+Maps are saved in the browser, per site: use Backup and Import on the home screen to move them between sites.
 
 ## Features
 
