@@ -21,6 +21,8 @@ export class Player {
   rt: MapRuntime | null = null;
   view: View = { z: 0.3, x: 0, y: 0 };
   target: { view: View; t0: number; from: View } | null = null;
+  /** Area the TV was asked to show (whole map or the DM's view); kept in view on resize until moved by hand. */
+  region: { cx: number; cy: number; w: number; h: number } | null = null;
   dpr = 1; vw = 1; vh = 1;
   prefs = loadPrefs();
   channel: Channel;
@@ -82,9 +84,11 @@ export class Player {
     this.canvas.height = Math.round(ch * this.dpr);
     Object.assign(this.canvas.style, { width: cw + 'px', height: ch + 'px', left: (W - cw) / 2 + 'px', top: (H - ch) / 2 + 'px', transform: `rotate(${rot}deg)` });
     this.initBar.style.transform = `rotate(${rot}deg)`;
-    // keep the same world point centered
+    // keep the same world point centered, or the requested area in view when nobody moved it (e.g. the window
+    // was maximised on the TV after opening as a popup)
     this.view.x += (cw - oldW) / 2; this.view.y += (ch - oldH) / 2;
     if (this.prefs.real) this.view.z = this.realZ();
+    else if (this.region && this.rt) { const g = this.region; this.goTo(g.cx, g.cy, g.w, g.h, false); }
     this.needRender = true;
   }
   realZ() { return this.prefs.ppi / CELL; }
@@ -163,6 +167,7 @@ export class Player {
   goTo(cx: number, cy: number, w: number, h: number, animate = true) {
     const z = this.prefs.real ? this.realZ() : clamp(Math.min(this.vw / w, this.vh / h), 0.02, 8);
     const v: View = { z, x: this.vw / 2 - cx * z, y: this.vh / 2 - cy * z };
+    this.region = { cx, cy, w, h };
     if (!animate) { this.view = v; this.target = null; }
     else this.target = { view: v, from: { ...this.view }, t0: performance.now() };
     this.needRender = true;
@@ -185,6 +190,7 @@ export class Player {
   onMove(e: PointerEvent) {
     if (!this.drag) return;
     const [x, y] = this.local(e);
+    this.region = null;
     this.view.x = this.drag.v.x + x - this.drag.p[0];
     this.view.y = this.drag.v.y + y - this.drag.p[1];
     this.needRender = true;
@@ -198,6 +204,7 @@ export class Player {
     const wx = (sx - this.view.x) / this.view.z, wy = (sy - this.view.y) / this.view.z;
     this.view = { z: nz, x: sx - wx * nz, y: sy - wy * nz };
     this.target = null;
+    this.region = null;
     this.needRender = true;
   }
 

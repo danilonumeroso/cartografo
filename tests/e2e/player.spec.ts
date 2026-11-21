@@ -35,6 +35,29 @@ test('TV waits alone and persists orientation and real-scale calibration', async
   await expect(slider).toHaveValue(calibration);
 });
 
+test('an untouched TV view refits the map when its window is resized', async ({ page }) => {
+  await home(page); await create(page);
+  const tv = await page.context().newPage();
+  await tv.setViewportSize({ width: 640, height: 400 });
+  await tv.goto('/?player=1');
+  await expect(page.locator('.tv-on')).toHaveText('TV connected');
+  // Read a pixel once the canvas has the expected size and a couple of frames were drawn into it.
+  const lit = (width: number, x: number, y: number) => tv.locator('.player-canvas').evaluate(async (c: HTMLCanvasElement, [width, x, y]) => {
+    if (c.clientWidth !== width) return null;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const k = c.width / c.clientWidth;
+    const d = c.getContext('2d')!.getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data;
+    return d[0] + d[1] + d[2] > 30;
+  }, [width, x, y]);
+  // The small window shows the whole map, centred: its corners are empty.
+  await expect.poll(() => lit(640, 320, 200)).toBe(true);
+  expect(await lit(640, 20, 200)).toBe(false);
+  // Opened as a popup, then maximised on the TV: the map must fill the new size too.
+  await tv.setViewportSize({ width: 1280, height: 800 });
+  await expect.poll(() => lit(1280, 1010, 400)).toBe(true);
+  expect(await lit(1280, 40, 400)).toBe(false);
+});
+
 test('TV shows visible turns and conditions live and disconnects on close', async ({ page }) => {
   await encounter(page);
   const tv = await connect(page);
