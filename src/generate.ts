@@ -4,7 +4,7 @@ import { STAMP_BY_ID, STAMP_PAD, VARIANTS } from './stamps';
 import { ctx2d, makeCanvas, mulberry32, pick, rint, Rng, rrange, uid } from './util';
 import { fbmTile, sampleWrap } from './noise';
 import { t } from './i18n';
-import { B, reset } from './genkit';
+import { B, reset, tavernName } from './genkit';
 import { generateDungeon, PRESETS, seedPrefix } from './dungeon';
 
 export type GenKind = 'dungeon' | 'cave' | 'forest' | 'tavern' | 'winter';
@@ -223,69 +223,177 @@ function winter(b: B) {
 // ------------------------------------------------------------------ tavern
 function tavern(b: B) {
   const { doc, r } = b;
-  doc.bg = 'grass'; doc.wallStyle = 'wood'; doc.ambient = 0.15; doc.fogEnabled = false;
   const C = doc.cols, R = doc.rows;
-  const kw = C >= 16 ? 5 : 0;
-  const hw = Math.max(4, Math.min(12, C - 4 - kw)), hh = Math.max(4, Math.min(8, R - 6));
-  const x0 = Math.max(1, Math.floor((C - hw - kw) / 2)), y0 = Math.max(2, Math.min(Math.floor((R - hh) / 2) - 1, R - hh - 4));
-  // street
-  for (let x = -1; x <= C + 1; x += 0.6) b.paint('cobble', x, y0 + hh + 2.2, 1.6, 0.4, 0.8);
-  b.room(x0, y0, hw, hh, 'wood', t('Common room'));
+  // ---- look: every seed has its own materials, season and time of day
+  const wall = pick(r, ['wood', 'wood', 'stone', 'brick'] as const);
+  const hallFloor = wall === 'wood' ? pick(r, ['wood', 'wornplanks', 'parquet']) : pick(r, ['wornplanks', 'flagstone', 'wood']);
+  const season = pick(r, ['summer', 'summer', 'autumn', 'pines'] as const);
+  const night = r() < 0.3;
+  doc.bg = season === 'autumn' && r() < 0.5 ? 'leaves' : r() < 0.25 ? 'meadow' : 'grass';
+  doc.wallStyle = wall; doc.ambient = night ? 0.55 : 0.15; doc.fogEnabled = false;
+  // ---- the plan is drawn with the street below the inn and the kitchen on its right; mirroring puts
+  // the street above and/or the kitchen on the left
+  const fx = r() < 0.5, fy = r() < 0.35;
+  const P = (x: number, y: number): [number, number] => [fx ? C - x : x, fy ? R - y : y];
+  const rect = (x: number, y: number, w: number, h: number): [number, number, number, number] => [fx ? C - x - w : x, fy ? R - y - h : y, w, h];
+  const rot = (a: number) => { if (fx) a = -a; if (fy) a = Math.PI - a; return a; };
+  const stamp = (type: string, x: number, y: number, a = 0, scale = 1) => { const [X, Y] = P(x, y); return b.stamp(type, X, Y, rot(a), scale); };
+  const room = (x: number, y: number, w: number, h: number, floor: string, name: string) => { const [X, Y] = rect(x, y, w, h); return b.room(X, Y, w, h, floor, name); };
+  const door = (x: number, y: number, vertical: boolean, kind?: DoorKind, width = 1) => { const [X, Y] = P(x, y); return b.door(X, Y, vertical, kind, width); };
+  const wallSeg = (x1: number, y1: number, x2: number, y2: number) => {
+    const [a1, b1] = P(x1, y1), [a2, b2] = P(x2, y2);
+    doc.walls.push({ id: uid(), pts: [a1 * CELL, b1 * CELL, a2 * CELL, b2 * CELL], style: wall });
+  };
+
+  // ---- sizes: common room, kitchen wing, optional row of guest rooms at the back
+  const kw = C >= 16 ? rint(r, 4, 6) : 0;
+  const hw = Math.max(4, Math.min(rint(r, 8, 13), C - 4 - kw)), hh = Math.max(4, Math.min(rint(r, 6, 9), R - 7));
+  const guest = R >= 16 && r() < 0.55 ? 3 : 0; // depth of the guest wing
+  const total = hw + kw;
+  const x0 = Math.max(1, Math.min(C - total - 1, Math.round((C - total) / 2 + rrange(r, -0.2, 0.2) * (C - total))));
+  const y0 = Math.max(1 + guest, Math.min(R - hh - 4, Math.round((R - hh - guest - 4) / 2) + guest + rint(r, -1, 1)));
+  const front = y0 + hh; // the street side
+  const streetY = front + rrange(r, 1.8, 2.6);
+  const used: [number, number, number, number][] = [[x0 - 1, y0 - guest - 1, total + 2, hh + guest + 2.2]];
+  const isFree = (x: number, y: number, w: number, h: number) => x >= 0.5 && y >= 0.5 && x + w <= C - 0.5 && y + h <= R - 0.5 && !used.some(([ux, uy, uw, uh]) => x < ux + uw && ux < x + w && y < uy + uh && uy < y + h);
+
+  // street (cobbles or a dirt road), sometimes with a lane branching off it
+  const road = r() < 0.6 ? 'cobble' : 'dirt';
+  for (let x = -1; x <= C + 1; x += 0.6) { const [X, Y] = P(x, streetY); b.paint(road, X, Y, 1.6, 0.4, 0.8); }
+  used.push([0, streetY - 1.3, C, 2.6]);
+  if (r() < 0.4) {
+    const lx = r() < 0.5 ? rrange(r, 1.5, Math.max(1.6, x0 - 2)) : rrange(r, Math.min(C - 1.6, x0 + total + 2), C - 1.5);
+    if (lx > 1 && lx < C - 1) { for (let y = streetY; y <= R + 1; y += 0.6) { const [X, Y] = P(lx, y); b.paint(road, X, Y, 1.2, 0.4, 0.8); } used.push([lx - 1, streetY, 2, R]); }
+  }
+
+  // ---- rooms and walls
+  room(x0, y0, hw, hh, hallFloor, t('Common room'));
+  const kh = kw ? Math.max(2, Math.round(hh * rrange(r, 0.45, 0.62))) : 0;
   if (kw) {
-    b.room(x0 + hw, y0, kw, Math.ceil(hh / 2), 'flagstone', t('Kitchen'));
-    b.room(x0 + hw, y0 + Math.ceil(hh / 2), kw, hh - Math.ceil(hh / 2), 'wood', t('Pantry'));
-    // inner walls
-    doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, y0 * CELL, (x0 + hw) * CELL, (y0 + hh) * CELL], style: 'wood' });
-    doc.walls.push({ id: uid(), pts: [(x0 + hw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL, (x0 + hw + kw) * CELL, (y0 + Math.ceil(hh / 2)) * CELL], style: 'wood' });
-    b.door(x0 + hw, y0 + 1.5, true);
-    b.door(x0 + hw, y0 + hh - 1.5, true);
+    room(x0 + hw, y0, kw, kh, pick(r, ['flagstone', 'brickfloor', 'tiles']), t('Kitchen'));
+    room(x0 + hw, y0 + kh, kw, hh - kh, pick(r, ['wood', 'wornplanks']), t('Pantry'));
+    wallSeg(x0 + hw, y0, x0 + hw, y0 + hh);
+    wallSeg(x0 + hw, y0 + kh, x0 + hw + kw, y0 + kh);
+    door(x0 + hw, y0 + rint(r, 1, kh - 1) + 0.5, true);
+    if (r() < 0.5) door(x0 + hw, y0 + kh + Math.max(0.5, (hh - kh) / 2), true); else door(x0 + hw + kw / 2, y0 + kh, false);
+    if (r() < 0.5) door(x0 + hw + kw - 0.5 - rint(r, 0, Math.max(0, kw - 2)), y0, false); // back door
   }
-  b.door(x0 + hw / 2, y0 + hh, false, 'double', 2);
-  // common room
-  b.stamp('counter', x0 + hw / 2, y0 + 1.3, 0, 1);
-  b.stamp('tankards', x0 + hw / 2 - 0.7, y0 + 1.3, r() * 6.28, 0.7); b.stamp('bottles', x0 + hw / 2 + 0.8, y0 + 1.3, 0, 0.7);
-  if (hw >= 7) b.stamp('keg_rack', x0 + hw / 2, y0 + 0.45, 0, 0.8);
-  else for (let k = 0; k < 4; k++) b.stamp('barrel', x0 + hw / 2 - 1.2 + k * 0.8, y0 + 0.45);
-  if (hw >= 8) b.stamp('chandelier', x0 + hw / 2, y0 + hh / 2 + 0.5);
-  b.stamp('fireplace', x0 + 0.45, y0 + hh / 2, Math.PI / 2);
-  b.stamp('rug', x0 + 2, y0 + hh / 2, Math.PI / 2, 0.8);
-  const tables: [number, number][] = [];
-  for (let ty = y0 + 3; ty < y0 + hh - 1; ty += 2.4) for (let tx = x0 + 3.2; tx < x0 + hw - 1; tx += 2.6) tables.push([tx, ty]);
-  for (const [tx, ty] of tables) {
-    if (r() < 0.15) { b.stamp('card_table', tx, ty, 0, 0.85); continue; }
-    if (r() < 0.5) {
-      b.stamp('table_round', tx, ty, r() * 6.28, 0.9);
-      for (let k = 0; k < 4; k++) { const a = (k / 4) * 6.28 + r() * 0.5; b.stamp('stool', tx + Math.cos(a) * 0.85, ty + Math.sin(a) * 0.85); }
-    } else {
-      b.stamp('table', tx, ty, 0, 0.9);
-      b.stamp('bench', tx, ty - 0.7, 0, 0.8); b.stamp('bench', tx, ty + 0.7, 0, 0.8);
+  const guestRooms: [number, number][] = [];
+  if (guest) {
+    // a row of small rooms behind the common room, each opening onto it
+    wallSeg(x0, y0, x0 + hw, y0);
+    let gx = x0;
+    while (x0 + hw - gx >= 3) {
+      const gw = x0 + hw - gx < 7 ? x0 + hw - gx : rint(r, 3, 4);
+      room(gx, y0 - guest, gw, guest, pick(r, ['wood', 'wornplanks']), t('Guest room'));
+      if (gx > x0) wallSeg(gx, y0 - guest, gx, y0);
+      door(gx + gw / 2, y0, false);
+      guestRooms.push([gx, gw]);
+      gx += gw;
     }
-    if (r() < 0.6) b.stamp('candles', tx + 0.3, ty, 0, 0.7);
-    else if (r() < 0.5) b.stamp('tankards', tx - 0.2, ty, r() * 6.28, 0.6);
   }
+  const doorX = x0 + rrange(r, 0.3, 0.7) * hw;
+  door(doorX, front, false, 'double', 2);
+
+  // ---- common room: a bar, the hearth, tables, sometimes a bard's corner and stairs up
+  const barRight = kw > 0 && r() < 0.4; // bar along the kitchen wall instead of the back wall
+  if (barRight) {
+    stamp(pick(r, ['bar_counter', 'counter']), x0 + hw - 1.3, y0 + hh / 2, Math.PI / 2, 1);
+    stamp(pick(r, ['keg_rack', 'wine_rack']), x0 + hw - 0.45, y0 + hh / 2 + 1.6, Math.PI / 2, 0.8);
+    stamp('tankards', x0 + hw - 1.3, y0 + hh / 2 - 0.6, r() * 6.28, 0.7);
+  } else {
+    const bx = x0 + hw * rrange(r, 0.35, 0.65);
+    stamp(pick(r, ['bar_counter', 'counter']), bx, y0 + 1.3, 0, 1);
+    stamp('tankards', bx - 0.7, y0 + 1.3, r() * 6.28, 0.7); stamp('bottles', bx + 0.8, y0 + 1.3, 0, 0.7);
+    if (hw >= 7) stamp(pick(r, ['keg_rack', 'wine_rack']), bx, y0 + 0.45, 0, 0.8);
+    else for (let k = 0; k < 3; k++) stamp('barrel', bx - 0.8 + k * 0.8, y0 + 0.45);
+  }
+  const hearthY = y0 + hh * rrange(r, 0.35, 0.65);
+  stamp('fireplace', x0 + 0.45, hearthY, Math.PI / 2);
+  stamp(pick(r, ['rug', 'rug_fur', 'rug_round']), x0 + 1.9, hearthY, Math.PI / 2, 0.8);
+  if (r() < 0.5) stamp('armchair', x0 + 1.4, hearthY - 1.2, Math.PI / 2 + 0.4, 0.9);
+  if (hw >= 8) stamp('chandelier', x0 + hw / 2, y0 + hh / 2 + 0.5);
+  const bard = r() < 0.4, stairs = r() < 0.5;
+  if (bard) { stamp('rug_round', x0 + 1.4, y0 + hh - 1.3, 0, 0.8); stamp(pick(r, ['lute', 'harp']), x0 + 1.2, y0 + hh - 1.4, r() * 6.28, 0.8); stamp('stool', x0 + 1.8, y0 + hh - 1.1); }
+  if (stairs) stamp('stairs', x0 + hw - 0.8, y0 + hh - 1.2, Math.PI / 2, 0.8);
+  // tables on a loose grid that keeps clear of the hearth, the bar and the corners in use
+  const tx0 = x0 + 3.1, tx1 = x0 + hw - (barRight ? 2.6 : 1.2) - (stairs ? 0.6 : 0), ty0 = y0 + (barRight ? 1.6 : 3), ty1 = y0 + hh - 1.1;
+  const sx = rrange(r, 2.4, 2.9), sy = rrange(r, 2.3, 2.7);
+  for (let ty = ty0; ty < ty1; ty += sy) for (let tx = tx0; tx < tx1; tx += sx) {
+    if (bard && tx < x0 + 3 && ty > y0 + hh - 2.5) continue;
+    if (Math.abs(tx - doorX) < 1.2 && ty > y0 + hh - 1.8) continue;
+    const jx = tx + rrange(r, -0.25, 0.25), jy = ty + rrange(r, -0.2, 0.2);
+    const kind = r();
+    if (kind < 0.12) { stamp('card_table', jx, jy, 0, 0.85); continue; }
+    if (kind < 0.55) {
+      stamp('table_round', jx, jy, r() * 6.28, 0.9);
+      for (let k = 0, n = rint(r, 2, 4); k < n; k++) { const a = (k / n) * 6.28 + r() * 0.5; stamp(r() < 0.7 ? 'stool' : 'chair', jx + Math.cos(a) * 0.85, jy + Math.sin(a) * 0.85, a + Math.PI / 2); }
+    } else {
+      stamp('table', jx, jy, 0, 0.9);
+      stamp('bench', jx, jy - 0.7, 0, 0.8); stamp('bench', jx, jy + 0.7, 0, 0.8);
+    }
+    if (r() < 0.55) stamp(night ? 'candles' : pick(r, ['candles', 'bread_basket']), jx + 0.3, jy, 0, 0.7);
+    else if (r() < 0.5) stamp('tankards', jx - 0.2, jy, r() * 6.28, 0.6);
+  }
+  // ---- kitchen and pantry
   const kx = x0 + hw;
   if (kw) {
-    // kitchen
-    b.stamp('stove', kx + kw / 2, y0 + 0.5, 0, 0.9);
-    b.stamp('cooking_pots', kx + 0.7, y0 + 1.4, r() * 6.28, 0.8);
-    b.stamp('kitchen_table', kx + kw / 2, y0 + Math.ceil(hh / 2) - 0.8, 0, 0.9);
-    b.stamp('hanging_meat', kx + kw / 2, y0 + 1.5, 0, 0.8);
-    b.stamp('barrels', kx + kw - 0.8, y0 + 1);
+    stamp(pick(r, ['stove', 'spit_roast']), kx + kw / 2, y0 + 0.5, 0, 0.9);
+    stamp('cooking_pots', kx + 0.7, y0 + 1.4, r() * 6.28, 0.8);
+    if (kh >= 3) stamp('kitchen_table', kx + kw / 2, y0 + kh - 0.8, 0, 0.9);
+    stamp(pick(r, ['hanging_meat', 'chopping_block', 'washtub', 'sink']), kx + kw - 0.7, y0 + 1.4, 0, 0.8);
+    for (let k = 0, n = Math.round((kw * (hh - kh)) / 3); k < n; k++)
+      stamp(pick(r, ['crate', 'barrel', 'sacks', 'crate_apples', 'crate_veg', 'cheese', 'grain_sack', 'cask', 'pantry_shelf', 'basket_fish']), kx + 0.6 + rrange(r, 0, kw - 1.2), y0 + kh + 0.6 + rrange(r, 0, hh - kh - 1.2), r() * 6.28);
   }
-  // pantry
-  if (kw) for (let k = 0; k < 6; k++) b.stamp(pick(r, ['crate', 'barrel', 'sacks', 'crate_apples', 'crate_veg', 'cheese', 'grain_sack', 'cask']), kx + 0.6 + rrange(r, 0, kw - 1.2), y0 + Math.ceil(hh / 2) + 0.6 + rrange(r, 0, hh - Math.ceil(hh / 2) - 1.2), r() * 6.28);
-  // outside
-  b.stamp('lamppost', x0 + hw / 2 - 2, y0 + hh + 1);
-  b.stamp('lamppost', x0 + hw / 2 + 2, y0 + hh + 1);
-  b.stamp('signpost', x0 + hw / 2 + 3, y0 + hh + 0.6);
-  b.stamp('cart', x0 + hw + 3, y0 + hh + 2.4, Math.PI / 2);
-  b.stamp('hitching_post', x0 + hw / 2 - 3.5, y0 + hh + 0.6);
-  b.stamp('trough', x0 + hw / 2 - 3.5, y0 + hh + 1.3, 0, 0.8);
-  b.stamp('barrel_planter', x0 - 0.6, y0 + hh + 0.6);
-  for (let k = 0; k < C * R * 0.05; k++) {
+  // ---- guest rooms
+  for (const [gx, gw] of guestRooms) {
+    stamp(pick(r, ['bed', 'bed', 'bed_straw', 'bunk_bed']), gx + 0.75, y0 - guest + 1.05, 0, 0.9);
+    stamp(pick(r, ['chest', 'trunk_open', 'nightstand', 'washstand']), gx + gw - 0.6, y0 - guest + 0.5, 0, 0.8);
+    if (r() < 0.4) stamp('candles', gx + gw - 0.6, y0 - 0.6, 0, 0.6);
+  }
+
+  // ---- the front of the inn
+  stamp(night ? 'lamppost' : pick(r, ['lamppost', 'barrel_planter']), doorX - 2, front + 0.8);
+  stamp('lamppost', doorX + 2, front + 0.8);
+  stamp(pick(r, ['signpost', 'notice_board']), doorX + rrange(r, 2.6, 3.4), front + 0.5);
+  if (r() < 0.7) { stamp('hitching_post', doorX - 3.4, front + 0.6); stamp('trough', doorX - 3.4, front + 1.3, 0, 0.8); }
+
+  // ---- the yard: a few features of a country inn, placed where there is room
+  const feature = (w: number, h: number, draw: (x: number, y: number) => void) => {
+    for (let tries = 0; tries < 40; tries++) {
+      const x = rrange(r, 0.5, C - w - 0.5), y = rrange(r, 0.5, R - h - 0.5);
+      if (!isFree(x, y, w, h)) continue;
+      used.push([x - 0.5, y - 0.5, w + 1, h + 1]);
+      draw(x, y);
+      return;
+    }
+  };
+  const fence = (x: number, y: number, w: number, h: number) => {
+    for (let k = 0.5; k < w; k += 1) { stamp('picket_fence', x + k, y, 0, 0.9); if (k > 1.5 || r() < 0.5) stamp('picket_fence', x + k, y + h, 0, 0.9); }
+    for (let k = 0.5; k < h; k += 1) { stamp('picket_fence', x, y + k, Math.PI / 2, 0.9); stamp('picket_fence', x + w, y + k, Math.PI / 2, 0.9); }
+  };
+  const yard: Record<string, [number, number, (x: number, y: number) => void]> = {
+    stable: [5, 4, (x, y) => { fence(x, y, 5, 4); stamp('haystack', x + 1.2, y + 1.2); stamp('hay_bales', x + 3.5, y + 1, r() * 6.28); stamp('trough', x + 2.5, y + 2.8, 0, 0.9); if (r() < 0.5) stamp('covered_wagon', x + 3.6, y + 2.6, Math.PI / 2, 0.8); }],
+    garden: [4, 3, (x, y) => { fence(x, y, 4, 3); for (let k = 0; k < 4; k++) stamp(pick(r, ['pumpkins', 'wheat', 'sunflowers', 'lavender', 'flower_bush']), x + 0.8 + (k % 2) * 2.2, y + 0.8 + Math.floor(k / 2) * 1.3, 0, 0.8); if (r() < 0.6) stamp('scarecrow', x + 2, y + 1.5, 0, 0.8); }],
+    well: [2, 2, (x, y) => { stamp(pick(r, ['well_roofed', 'well', 'water_pump']), x + 1, y + 1); if (r() < 0.5) stamp('bucket', x + 1.8, y + 1.6, 0, 0.7); }],
+    coop: [3, 2, (x, y) => { stamp('chicken_coop', x + 1.5, y + 1); if (r() < 0.6) stamp('firewood', x + 2.7, y + 1.5, r() * 6.28, 0.8); }],
+    market: [4, 2, (x, y) => { stamp(pick(r, ['market_stall', 'fruit_stall']), x + 1, y + 1); stamp(pick(r, ['crate_stack', 'wheelbarrow', 'crate_apples']), x + 3, y + 1, r() * 6.28, 0.9); }],
+    outhouse: [2, 2, (x, y) => stamp('outhouse', x + 1, y + 1)],
+    pond: [4, 3, (x, y) => { for (let k = 0; k < 4; k++) { const [X, Y] = P(x + 2 + rrange(r, -0.8, 0.8), y + 1.5 + rrange(r, -0.4, 0.4)); b.paint('water', X, Y, rrange(r, 0.8, 1.3), 0.3, 1); } stamp('reeds', x + 0.6, y + 0.6, 0, 0.8); stamp('lily_pads', x + 2, y + 1.5, 0, 0.8); }],
+    beehives: [3, 2, (x, y) => { stamp('beehive', x + 0.8, y + 1, 0, 0.9); stamp('beehive', x + 2.2, y + 1, 0, 0.9); stamp('lavender', x + 1.5, y + 1.8, 0, 0.8); }],
+  };
+  const picks = Object.keys(yard).sort(() => r() - 0.5).slice(0, rint(r, 2, 4));
+  for (const k of picks) { const [w, h, draw] = yard[k]; feature(w, h, draw); }
+
+  // ---- vegetation, by season
+  const plants = season === 'autumn' ? ['autumn_maple', 'tree_autumn', 'bush', 'fallen_leaves', 'pumpkins', 'rocks', 'golden_tree']
+    : season === 'pines' ? ['pine', 'pine', 'birch', 'fern', 'rocks', 'mossy_log', 'bush']
+    : ['tree', 'bush', 'tallgrass', 'flowers', 'rocks', 'birch', 'flower_bush', 'wildflowers', 'berry_bush', 'fruit_tree'];
+  for (let k = 0; k < C * R * rrange(r, 0.06, 0.11); k++) {
     const x = rrange(r, 0, C), y = rrange(r, 0, R);
-    if (x > x0 - 1.5 && x < x0 + hw + kw + 1.5 && y > y0 - 1.5 && y < y0 + hh + 3.8) continue;
-    b.stamp(pick(r, ['tree', 'bush', 'tallgrass', 'flowers', 'pine', 'rocks', 'birch', 'flower_bush', 'wildflowers', 'hay_bales', 'berry_bush']), x, y, r() * 6.28, rrange(r, 0.8, 1.2));
+    if (!isFree(x - 0.4, y - 0.4, 0.8, 0.8)) continue;
+    stamp(pick(r, plants), x, y, r() * 6.28, rrange(r, 0.8, 1.2));
   }
-  b.label(t('The Jolly Barrel'), x0 + hw / 2, y0 - 0.8, 48, false).font = 'Pirata One';
+  const [lx, ly] = P(x0 + hw / 2, y0 - guest - 0.8);
+  b.label(doc.parent ? doc.name : tavernName(r), lx, ly, 48, false).font = 'Pirata One';
 }

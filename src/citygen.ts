@@ -1,6 +1,6 @@
 import { Building, BuildingKind, CELL, Label, RoofStyle } from './model';
 import type { MapRuntime } from './runtime';
-import { B, reset } from './genkit';
+import { B, reset, tavernName } from './genkit';
 import { seedNumber } from './dungeon';
 import { fantasyName } from './worldgen';
 import { clamp, mulberry32, pick, pointInPoly, Rng, rrange, uid } from './util';
@@ -20,13 +20,6 @@ export interface CityParams {
 export const DEFAULT_CITY: CityParams = { size: 2, walls: true, water: 'river', castle: true, density: 2, roofs: 'mixed' };
 export interface CityStats { buildings: number; districts: number; taverns: number; name: string }
 
-const TAVERN_A = ['Golden', 'Rusty', 'Drunken', 'Sleeping', 'Silver', 'Laughing', 'Crooked', 'Blind', 'Wandering', 'Red', 'Black', 'Merry', 'Salty', 'Howling'];
-const TAVERN_B = ['Griffin', 'Barrel', 'Goose', 'Dragon', 'Lantern', 'Anchor', 'Stag', 'Mermaid', 'Boar', 'Kettle', 'Crown', 'Owl', 'Wyvern', 'Tankard'];
-// Italian names need gender agreement, so they are written out whole
-const TAVERN_IT = ['Il Grifone d’Oro', 'La Botte Arrugginita', 'L’Oca Ubriaca', 'Il Drago Dormiente', 'La Lanterna d’Argento', 'Il Cervo Ridente', 'La Sirena Storta',
-  'Il Cinghiale Nero', 'La Corona Rossa', 'Il Gufo Cieco', 'La Viverna Allegra', 'Il Boccale Salato', 'Il Lupo che Ulula', 'L’Ancora Errante', 'Il Paiolo Allegro',
-  'La Volpe Zoppa', 'Il Corvo d’Argento', 'La Taverna del Pozzo', 'Il Barile Dorato', 'La Rosa Spinosa'];
-const tavernName = (r: Rng) => (lang === 'it' ? pick(r, TAVERN_IT) : `The ${pick(r, TAVERN_A)} ${pick(r, TAVERN_B)}`);
 
 type P = [number, number];
 

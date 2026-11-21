@@ -1,7 +1,8 @@
 import { CELL, Door, DoorKind, Label, MapDoc, Room, Stamp } from './model';
 import type { MapRuntime } from './runtime';
 import { STAMP_BY_ID, STAMP_PAD, VARIANTS } from './stamps';
-import { mulberry32, Rng, uid } from './util';
+import { mulberry32, pick, Rng, uid } from './util';
+import { lang } from './i18n';
 
 /** Small builder used by the generators: places objects in grid units and keeps props inside the map. */
 export class B {
@@ -104,3 +105,13 @@ export function nearby(maxDy: number, maxDx: number, step = 0.5): [number, numbe
     for (const sy of dy ? [-1, 1] : [1]) for (const sx of dx ? [-1, 1] : [1]) out.push([sx * dx, sy * dy]);
   return out.sort((a, b) => Math.hypot(a[0] * 0.5, a[1]) - Math.hypot(b[0] * 0.5, b[1]));
 }
+
+// ---------------------------------------------------------------- names
+const TAVERN_A = ['Golden', 'Rusty', 'Drunken', 'Sleeping', 'Silver', 'Laughing', 'Crooked', 'Blind', 'Wandering', 'Red', 'Black', 'Merry', 'Salty', 'Howling'];
+const TAVERN_B = ['Griffin', 'Barrel', 'Goose', 'Dragon', 'Lantern', 'Anchor', 'Stag', 'Mermaid', 'Boar', 'Kettle', 'Crown', 'Owl', 'Wyvern', 'Tankard'];
+// Italian names need gender agreement, so they are written out whole
+const TAVERN_IT = ['Il Grifone d’Oro', 'La Botte Arrugginita', 'L’Oca Ubriaca', 'Il Drago Dormiente', 'La Lanterna d’Argento', 'Il Cervo Ridente', 'La Sirena Storta',
+  'Il Cinghiale Nero', 'La Corona Rossa', 'Il Gufo Cieco', 'La Viverna Allegra', 'Il Boccale Salato', 'Il Lupo che Ulula', 'L’Ancora Errante', 'Il Paiolo Allegro',
+  'La Volpe Zoppa', 'Il Corvo d’Argento', 'La Taverna del Pozzo', 'Il Barile Dorato', 'La Rosa Spinosa'];
+/** A random inn name in the UI language. */
+export const tavernName = (r: Rng) => (lang === 'it' ? pick(r, TAVERN_IT) : `The ${pick(r, TAVERN_A)} ${pick(r, TAVERN_B)}`);
