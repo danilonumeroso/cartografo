@@ -16,6 +16,12 @@ export type TokenKind = 'pc' | 'ally' | 'npc' | 'monster';
 
 export interface Room { id: string; pts: number[]; floor: string; zoneOnly?: boolean; name?: string }
 export interface Wall { id: string; pts: number[]; style: WallStyle }
+export type PathKind = 'river' | 'road' | 'trail' | 'border';
+/** A vector line on world maps: rivers, roads, trails and borders. Width in world px. */
+export interface MapPath { id: string; pts: number[]; kind: PathKind; width: number; name?: string }
+export type MapKind = 'battle' | 'world';
+export type GridShape = 'square' | 'hex';
+export type DistUnit = 'ft' | 'mi' | 'km';
 export interface Door { id: string; x: number; y: number; rot: number; kind: DoorKind; open: boolean; width: number }
 export interface Stamp { id: string; type: string; x: number; y: number; rot: number; scale: number; flip?: boolean; variant: number; hidden?: boolean }
 export interface Light { id: string; x: number; y: number; radius: number; color: string; intensity: number; flicker: boolean; stampId?: string }
@@ -26,13 +32,18 @@ export interface Token {
   hp: number; maxHp: number; ac: number; initMod: number; init: number | null; conditions: string[]; hidden: boolean;
 }
 export interface Combat { active: boolean; round: number; turn: string | null; members: string[] }
-export interface GridSettings { show: boolean; color: string; opacity: number; showPlayers: boolean; feet: number }
+export interface GridSettings {
+  show: boolean; color: string; opacity: number; showPlayers: boolean;
+  /** Distance covered by one cell, in `unit` (the name is kept for saved maps). */
+  feet: number;
+  shape?: GridShape; unit?: DistUnit;
+}
 
 export interface MapDoc {
-  id: string; name: string; kind: 'battle';
+  id: string; name: string; kind: MapKind;
   cols: number; rows: number;
   bg: string; caveFloor: string; wallStyle: WallStyle;
-  rooms: Room[]; walls: Wall[]; doors: Door[]; stamps: Stamp[]; lights: Light[];
+  rooms: Room[]; walls: Wall[]; doors: Door[]; stamps: Stamp[]; lights: Light[]; paths: MapPath[];
   labels: Label[]; markers: Marker[]; tokens: Token[];
   combat: Combat;
   grid: GridSettings;
@@ -40,10 +51,12 @@ export interface MapDoc {
   fogEnabled: boolean;
   /** Animated particles drawn over the map (shown on the TV too). */
   weather: Weather;
+  /** World maps: cells of fog cleared around player characters when they move during play. */
+  sight?: number;
   createdAt: number; updatedAt: number;
 }
 
-export const OBJECT_KEYS = ['rooms', 'walls', 'doors', 'stamps', 'lights', 'labels', 'markers', 'tokens'] as const;
+export const OBJECT_KEYS = ['rooms', 'walls', 'doors', 'stamps', 'lights', 'paths', 'labels', 'markers', 'tokens'] as const;
 export type ObjectKey = typeof OBJECT_KEYS[number];
 
 export function newDoc(name: string, cols: number, rows: number, bg = 'rock'): MapDoc {
@@ -51,9 +64,9 @@ export function newDoc(name: string, cols: number, rows: number, bg = 'rock'): M
   return {
     id: uid(), name, kind: 'battle', cols, rows,
     bg, caveFloor: 'cave', wallStyle: 'stone',
-    rooms: [], walls: [], doors: [], stamps: [], lights: [], labels: [], markers: [], tokens: [],
+    rooms: [], walls: [], doors: [], stamps: [], lights: [], paths: [], labels: [], markers: [], tokens: [],
     combat: { active: false, round: 1, turn: null, members: [] },
-    grid: { show: true, color: '#000000', opacity: 0.22, showPlayers: true, feet: 5 },
+    grid: { show: true, color: '#000000', opacity: 0.22, showPlayers: true, feet: 5, shape: 'square', unit: 'ft' },
     ambient: 0, fogEnabled: false, weather: 'none', createdAt: now, updatedAt: now,
   };
 }
@@ -65,6 +78,8 @@ export function migrateDoc(d: any): MapDoc {
   for (const k of OBJECT_KEYS) if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   out.grid = { ...base.grid, ...(d.grid || {}) };
   out.combat = { ...base.combat, ...(d.combat || {}) };
+  if (out.kind !== 'world') out.kind = 'battle';
+  if (!out.weather) out.weather = 'none';
   return out;
 }
 
@@ -94,6 +109,16 @@ export const CONDITIONS: { id: string; name: string; icon: string }[] = [
 
 export const FONTS = ['IM Fell English', 'Cinzel', 'MedievalSharp', 'Uncial Antiqua', 'Pirata One', 'Almendra'];
 export const MARKER_ICONS = ['📍', '⚔️', '💀', '💰', '🗝️', '🚪', '⚠️', '❓', '⭐', '🔥', '🐉', '🧙', '👁️', '📜', '🪤', '⛺'];
+
+/** A blank world/region map: open sea, hex grid in miles, fog on. */
+export function newWorldDoc(name: string, cols: number, rows: number): MapDoc {
+  const d = newDoc(name, cols, rows, 'w_ocean');
+  d.kind = 'world';
+  d.grid = { show: true, color: '#1a2a3a', opacity: 0.16, showPlayers: false, feet: 6, shape: 'hex', unit: 'mi' };
+  d.fogEnabled = true;
+  d.sight = 2;
+  return d;
+}
 
 export function newToken(x: number, y: number, kind: TokenKind = 'monster', name = t('Monster')): Token {
   return {

@@ -281,7 +281,7 @@ export class Player {
     const ctx = this.ctx, z = this.view.z;
     ctx.save();
     ctx.setTransform(this.dpr * z, 0, 0, this.dpr * z, this.dpr * this.view.x, this.dpr * this.view.y);
-    if (this.measure) drawMeasure(ctx, this.measure.a, this.measure.b, z, rt.doc.grid.feet);
+    if (this.measure) drawMeasure(ctx, this.measure.a, this.measure.b, z, rt.doc.grid);
     const now = performance.now();
     this.pings = this.pings.filter((p) => now - p.t < 1600);
     for (const p of this.pings) drawPing(ctx, p.x, p.y, now - p.t, z);

@@ -151,3 +151,18 @@ export function canvasToBlob(c: HTMLCanvasElement, type = 'image/png', q?: numbe
 }
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r(null)));
+
+/** Centre of the pointy-top hex (one cell wide, odd rows shifted right) that contains a point. */
+export function hexCenter(x: number, y: number, cell = 100): [number, number] {
+  const R = cell / Math.sqrt(3), dy = R * 1.5;
+  let best: [number, number] = [x, y], bd = Infinity;
+  const row0 = Math.round(y / dy);
+  for (let row = row0 - 1; row <= row0 + 1; row++) {
+    const off = row % 2 ? cell / 2 : 0, col = Math.round((x - off) / cell);
+    for (let c = col - 1; c <= col + 1; c++) {
+      const cx = c * cell + off, cy = row * dy, d = (cx - x) ** 2 + (cy - y) ** 2;
+      if (d < bd) { bd = d; best = [cx, cy]; }
+    }
+  }
+  return best;
+}

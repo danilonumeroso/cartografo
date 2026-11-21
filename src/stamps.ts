@@ -19,11 +19,15 @@ import { CHRISTMAS } from './packs/christmas';
 import { FANTASY } from './packs/fantasy';
 import { DECOR } from './packs/decor';
 import { EXTRAS } from './packs/extras';
+import { WORLD } from './packs/world';
 
 export type { StampDef } from './art';
 
 export const CATEGORIES = ['furniture', 'kitchen', 'workshop', 'arcane', 'temple', 'dungeon', 'caves', 'nature', 'town', 'camp', 'nautical', 'treasure', 'christmas', 'fantasy', 'decor'] as const;
+/** Library categories offered on world/region maps. */
+export const WORLD_CATEGORIES = ['w_terrain', 'w_places', 'w_sea'] as const;
 export const categoryName = (c: string) => ({
+  w_terrain: t('Terrain'), w_places: t('Places'), w_sea: t('Seas & decorations'),
   furniture: t('Furniture'), kitchen: t('Kitchen & tavern'), workshop: t('Workshop & forge'), arcane: t('Magic & alchemy'),
   temple: t('Temple & graveyard'), dungeon: t('Dungeon'), caves: t('Caves'), nature: t('Nature'), town: t('Town & farm'),
   camp: t('Camp & war'), nautical: t('Docks & ships'), treasure: t('Treasure'), christmas: t('Christmas & winter'),
@@ -32,8 +36,8 @@ export const categoryName = (c: string) => ({
 
 export const STAMP_PAD = 16;
 
-const ALL: StampDef[] = [...CLASSIC, ...FURNITURE, ...KITCHEN, ...WORKSHOP, ...ARCANE, ...TEMPLE, ...DUNGEON, ...CAVES, ...NATURE, ...TOWN, ...CAMP, ...NAUTICAL, ...TREASURE, ...CHRISTMAS, ...FANTASY, ...DECOR, ...EXTRAS];
-const order = new Map<string, number>(CATEGORIES.map((c, i) => [c, i]));
+const ALL: StampDef[] = [...CLASSIC, ...FURNITURE, ...KITCHEN, ...WORKSHOP, ...ARCANE, ...TEMPLE, ...DUNGEON, ...CAVES, ...NATURE, ...TOWN, ...CAMP, ...NAUTICAL, ...TREASURE, ...CHRISTMAS, ...FANTASY, ...DECOR, ...EXTRAS, ...WORLD];
+const order = new Map<string, number>([...CATEGORIES, ...WORLD_CATEGORIES].map((c, i) => [c, i]));
 /** All built-in stamps, grouped by category (stable within a category). */
 export const STAMPS: StampDef[] = ALL.map((s, i) => [s, i] as const)
   .sort((a, b) => (order.get(a[0].cat) ?? 99) - (order.get(b[0].cat) ?? 99) || a[1] - b[1]).map((x) => x[0]);

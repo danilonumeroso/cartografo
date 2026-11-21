@@ -2,6 +2,7 @@ import { h, icon } from '../dom';
 import type { Editor } from '../editor';
 import { iconBtn } from './common';
 import { showGenerator } from './generator';
+import { showWorldGenerator } from './worldgen';
 import { lang, t } from '../i18n';
 
 const BASE = import.meta.env.BASE_URL;
@@ -11,8 +12,10 @@ const TEMPLATES = [
   { id: 'forest', name: t('Forest'), desc: t('Clearing, trail, camp'), img: 'templates/forest.jpg' },
   { id: 'tavern', name: t('Tavern'), desc: t('Hall, kitchen, street'), img: 'templates/tavern.jpg' },
   { id: 'winter', name: t('Winter forest'), desc: t('Snowy pines, frozen stream, festive camp'), img: 'templates/winter.jpg' },
+  { id: 'world', name: t('World'), desc: t('Continents, kingdoms, rivers, roads'), img: 'templates/world.jpg' },
 ];
 const SIZES: [string, number, number][] = [[t('Small'), 20, 15], [t('Medium'), 30, 22], [t('Large'), 40, 30]];
+
 let size = 1;
 
 function rel(ts: number) {
@@ -85,7 +88,7 @@ function render(ed: Editor) {
           h('div', null, h('h1', null, t('New map')), h('p', null, t('Pick a starting point: a generator gives you a complete map to polish.'))),
           sizeSeg),
         h('div', { class: 'tpl-grid' },
-          ...TEMPLATES.map((t) => h('button', { class: 'tpl', onclick: () => (t.id === 'dungeon' ? showGenerator(ed, 'new', size) : create(t.id, t.name)) },
+          ...TEMPLATES.map((t) => h('button', { class: 'tpl', onclick: () => (t.id === 'dungeon' ? showGenerator(ed, 'new', size) : t.id === 'world' ? showWorldGenerator(ed, 'new', size) : create(t.id, t.name)) },
             h('img', { class: 'tpl-img', src: BASE + t.img, alt: '' }),
             h('span', { class: 'tpl-text' }, h('strong', null, t.name), h('small', null, t.desc)))),
           empty)),

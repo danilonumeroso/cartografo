@@ -9,15 +9,22 @@ export interface TexDef {
   id: string; name: string; layer: 'below' | 'above'; floor?: boolean; liquid?: boolean; swatch: string;
   /** Liquid edge highlight: [r, g, b, maxAlpha]. */
   foam?: [number, number, number, number];
+  /** Painted at world-map scale (biomes), not offered on battle maps. */
+  world?: boolean;
 }
-export type TexGroup = 'ground' | 'built' | 'exotic' | 'cover';
+export type TexGroup = 'ground' | 'built' | 'exotic' | 'cover' | 'w_land' | 'w_biome';
 const GROUP: Record<string, TexGroup> = {
   rock: 'ground', grass: 'ground', forest: 'ground', dirt: 'ground', mud: 'ground', sand: 'ground', snow: 'ground', gravel: 'ground', cave: 'ground',
   meadow: 'ground', leaves: 'ground', jungle: 'ground', swamp: 'ground', crackedearth: 'ground', ash: 'ground', straw: 'ground',
   obsidian: 'exotic', crystal: 'exotic', ice: 'exotic', bonefloor: 'exotic', flesh: 'exotic', astral: 'exotic', clouds: 'exotic', runes: 'exotic',
 };
 /** Picker section of a texture: natural ground, built floors, exotic floors, liquids and cover. */
-export const texGroup = (id: string): TexGroup => TEX_BY_ID.get(id)?.layer === 'above' ? 'cover' : GROUP[id] ?? 'built';
+export const texGroup = (id: string): TexGroup => {
+  const d = TEX_BY_ID.get(id);
+  if (d?.world) return d.layer === 'above' ? 'w_biome' : 'w_land';
+  return d?.layer === 'above' ? 'cover' : GROUP[id] ?? 'built';
+};
+
 
 export const TEXTURES: TexDef[] = [
   { id: 'rock', name: t('Dark rock'), layer: 'below', floor: true, swatch: '#3a3632' },
@@ -71,10 +78,25 @@ export const TEXTURES: TexDef[] = [
   { id: 'poison', name: t('Poison'), layer: 'above', liquid: true, swatch: '#6a2a8a', foam: [220, 160, 255, 180] },
   { id: 'blood', name: t('Blood'), layer: 'above', liquid: true, swatch: '#6a0a12', foam: [200, 60, 60, 140] },
   { id: 'tar', name: t('Tar'), layer: 'above', liquid: true, swatch: '#141210', foam: [120, 110, 100, 120] },
+  { id: 'w_ocean', name: t('Ocean'), layer: 'below', world: true, swatch: '#2f6f8f' },
+  { id: 'land', name: t('Land and sea'), layer: 'below', world: true, swatch: '#9db46a' },
+  { id: 'w_land', name: t('Grassland'), layer: 'below', world: true, swatch: '#9db46a' },
+  { id: 'w_forest', name: t('Woodland'), layer: 'above', world: true, swatch: '#5f8a45' },
+  { id: 'w_jungle', name: t('Jungle'), layer: 'above', world: true, swatch: '#3f7a3a' },
+  { id: 'w_steppe', name: t('Steppe'), layer: 'above', world: true, swatch: '#c2b773' },
+  { id: 'w_desert', name: t('Desert'), layer: 'above', world: true, swatch: '#e2c98a' },
+  { id: 'w_badlands', name: t('Badlands'), layer: 'above', world: true, swatch: '#c08a5a' },
+  { id: 'w_swamp', name: t('Marshland'), layer: 'above', world: true, swatch: '#7a8a52' },
+  { id: 'w_highland', name: t('Highlands'), layer: 'above', world: true, swatch: '#a89a7a' },
+  { id: 'w_tundra', name: 'Tundra', layer: 'above', world: true, swatch: '#b8c2a8' },
+  { id: 'w_snow', name: t('Snowfields'), layer: 'above', world: true, swatch: '#eef3f6' },
+  { id: 'w_volcanic', name: t('Volcanic ash'), layer: 'above', world: true, swatch: '#5a4e4a' },
 ];
 export const TEX_BY_ID = new Map(TEXTURES.map((t) => [t.id, t]));
-export const BELOW = TEXTURES.filter((t) => t.layer === 'below').map((t) => t.id);
-export const ABOVE = TEXTURES.filter((t) => t.layer === 'above').map((t) => t.id);
+export const BELOW = TEXTURES.filter((t) => t.layer === 'below' && !t.world).map((t) => t.id);
+export const ABOVE = TEXTURES.filter((t) => t.layer === 'above' && !t.world).map((t) => t.id);
+/** World-map biome overlays, painted on land in this order. */
+export const BIOMES = TEXTURES.filter((t) => t.world && t.layer === 'above').map((t) => t.id);
 
 const cache = new Map<string, HTMLCanvasElement>();
 const dataCache = new Map<string, Uint8ClampedArray>();
@@ -91,10 +113,11 @@ export function getTextureData(id: string): Uint8ClampedArray {
 }
 /** Textures needed for the first frame; the rest are generated lazily or when idle. */
 const ESSENTIAL = ['rock', 'grass', 'cave', 'flagstone', 'wood', 'water', 'wall_stone', 'wall_cave', 'variation', 'fog'];
+const LATER = ['fog_world'];
 export const WALL_TEXTURES = ['wall_stone', 'wall_brick', 'wall_wood', 'wall_cave', 'wall_dark', 'wall_marble', 'wall_sandstone', 'wall_palisade', 'wall_hedge', 'wall_ice', 'wall_obsidian', 'wall_bone', 'wall_crystal'];
 export function preloadTextures() {
   for (const id of ESSENTIAL) getTexture(id);
-  const rest = [...TEXTURES.map((t) => t.id), ...WALL_TEXTURES].filter((id) => !cache.has(id));
+  const rest = [...TEXTURES.map((t) => t.id), ...WALL_TEXTURES, ...LATER].filter((id) => !cache.has(id));
   const idle = (cb: () => void) => ('requestIdleCallback' in window ? (window as any).requestIdleCallback(cb, { timeout: 2000 }) : setTimeout(cb, 30));
   const step = () => { const id = rest.shift(); if (!id) return; getTexture(id); idle(step); };
   idle(step);
@@ -365,6 +388,19 @@ function runeGlyph(x: C2D, r: Rng, X: number, Y: number, s: number) {
   x.stroke();
 }
 
+/** Painterly world-map ground: soft two-tone noise with dabbed brush strokes. */
+function worldGround(seed: number, c1: string, c2: string, r: Rng, dabs: string[]): HTMLCanvasElement {
+  const c = noiseBase(seed, c1, c2, 0.03, 3, 0.9), x = ctx2d(c);
+  blotches(x, r, 110, dabs, [6, 22]);
+  x.lineCap = 'round';
+  for (let i = 0; i < 320; i++) {
+    const px = r() * TS, py = r() * TS, L = rrange(r, 6, 14), a = rrange(r, -0.5, 0.5) - 0.6;
+    x.strokeStyle = r() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)'; x.lineWidth = rrange(r, 2, 4);
+    wrap(x, px, py, 16, (X, Y) => { x.beginPath(); x.moveTo(X, Y); x.lineTo(X + Math.cos(a) * L, Y + Math.sin(a) * L); x.stroke(); });
+  }
+  return c;
+}
+
 function generate(id: string): HTMLCanvasElement {
   const seed = [...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffff;
   const r = mulberry32(seed);
@@ -604,6 +640,58 @@ function generate(id: string): HTMLCanvasElement {
     }
     case 'fog': {
       c = noiseBase(seed, '#0e1016', '#2b303c', 0.05, 5, 1.2);
+      break;
+    }
+    case 'fog_world': {
+      // terra incognita: aged parchment with faint ink hatching
+      c = noiseBase(seed, '#cdbb92', '#ddcca4', 0.04, 2, 0.7); x = ctx2d(c);
+      overlayNoise(x, seed + 1, 0.05, 8);
+      for (let i = 0; i < 2500; i++) { x.fillStyle = r() < 0.5 ? 'rgba(110,80,40,0.10)' : 'rgba(255,250,235,0.12)'; x.fillRect(r() * TS, r() * TS, 1.2, 1.2); }
+      break;
+    }
+    case 'w_ocean': {
+      c = noiseBase(seed, '#2a6686', '#337392', 0.02, 2, 0.6); x = ctx2d(c);
+      x.lineCap = 'round';
+      for (let i = 0; i < 46; i++) {
+        const px = r() * TS, py = r() * TS, L = rrange(r, 14, 30);
+        x.strokeStyle = `rgba(220,240,250,${rrange(r, 0.05, 0.1)})`; x.lineWidth = rrange(r, 1, 1.6);
+        wrap(x, px, py, 34, (X, Y) => { x.beginPath(); x.moveTo(X, Y); x.quadraticCurveTo(X + L / 2, Y - 4, X + L, Y); x.stroke(); });
+      }
+      break;
+    }
+    case 'land': { const src = getTexture('w_land'); c = makeCanvas(TS, TS); x = ctx2d(c); x.drawImage(src, 0, 0); x.fillStyle = 'rgba(47,111,143,1)'; x.beginPath(); x.moveTo(TS, 0); x.lineTo(TS, TS); x.lineTo(0, TS); x.closePath(); x.fill(); break; }
+    case 'w_land': c = worldGround(seed, '#93ad62', '#b4c47c', r, ['rgba(70,100,40,0.10)', 'rgba(230,220,150,0.08)']); break;
+    case 'w_forest': c = worldGround(seed, '#4f7d3c', '#6b9450', r, ['rgba(30,60,20,0.14)', 'rgba(150,180,90,0.08)']); break;
+    case 'w_jungle': c = worldGround(seed, '#2f6a32', '#4a8a44', r, ['rgba(20,50,20,0.16)', 'rgba(120,180,80,0.08)']); break;
+    case 'w_steppe': c = worldGround(seed, '#b4ab68', '#cfc386', r, ['rgba(120,110,50,0.10)', 'rgba(240,230,170,0.08)']); break;
+    case 'w_desert': {
+      c = worldGround(seed, '#dcc184', '#ecd7a2', r, ['rgba(170,130,70,0.10)', 'rgba(255,250,220,0.10)']); x = ctx2d(c);
+      for (let i = 0; i < 26; i++) {
+        const y0 = r() * TS, amp = rrange(r, 4, 9), ph = r() * 6.28;
+        x.strokeStyle = 'rgba(150,110,60,0.18)'; x.lineWidth = 1.6;
+        for (const oy of [-TS, 0, TS]) { x.beginPath(); for (let px = 0; px <= TS; px += 8) { const yy = y0 + oy + Math.sin((px / TS) * Math.PI * 2 * 2 + ph) * amp; px ? x.lineTo(px, yy) : x.moveTo(px, yy); } x.stroke(); }
+      }
+      break;
+    }
+    case 'w_badlands': {
+      c = worldGround(seed, '#b07a4e', '#cc9a68', r, ['rgba(110,60,30,0.14)', 'rgba(240,200,150,0.08)']); x = ctx2d(c);
+      cracks(x, r, 30, 'rgba(90,50,25,0.35)', [10, 26], 1.2);
+      break;
+    }
+    case 'w_swamp': {
+      c = worldGround(seed, '#6e7e48', '#8a9660', r, ['rgba(60,80,50,0.18)', 'rgba(150,170,110,0.08)']); x = ctx2d(c);
+      blotches(x, r, 40, ['rgba(70,110,110,0.22)'], [4, 12]);
+      break;
+    }
+    case 'w_highland': c = worldGround(seed, '#9a8c6e', '#b7aa88', r, ['rgba(80,70,50,0.14)', 'rgba(230,220,190,0.08)']); break;
+    case 'w_tundra': c = worldGround(seed, '#a8b49a', '#c4ccb6', r, ['rgba(110,120,100,0.12)', 'rgba(250,250,245,0.12)']); break;
+    case 'w_snow': {
+      c = worldGround(seed, '#e2eaf0', '#f8fbfd', r, ['rgba(150,180,210,0.12)', 'rgba(255,255,255,0.2)']);
+      break;
+    }
+    case 'w_volcanic': {
+      c = worldGround(seed, '#4a403c', '#665a54', r, ['rgba(20,15,12,0.2)', 'rgba(180,90,40,0.10)']); x = ctx2d(c);
+      cracks(x, r, 26, 'rgba(255,110,40,0.35)', [8, 22], 1.2);
       break;
     }
     case 'parquet': {

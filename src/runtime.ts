@@ -15,6 +15,7 @@ export class MapRuntime {
     this.doc = doc;
     this.engine = new Engine(doc);
     this.fog = new Fog(this.W, this.H);
+    if (doc.kind === 'world') this.fog.tex = 'fog_world';
     if (fogFull) { this.fog.fillAll(); this.fog.pending = null; this.fog.changed = true; }
     this.engine.invalidateAll();
   }
@@ -67,6 +68,7 @@ export class MapRuntime {
       this.engine.changed.add(k);
     }
     this.fog = new Fog(this.W, this.H);
+    this.fog.tex = oldFog.tex;
     this.fog.fillAll();
     ctx2d(this.fog.mask).clearRect(ox * 0.5, oy * 0.5, oldFog.mw, oldFog.mh);
     ctx2d(this.fog.mask).drawImage(oldFog.mask, ox * 0.5, oy * 0.5);

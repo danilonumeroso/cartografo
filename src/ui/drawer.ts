@@ -1,16 +1,20 @@
 import { assets } from '../assets';
 import { h, icon, pickFile, toast } from '../dom';
 import type { Editor } from '../editor';
-import { CATEGORIES, categoryName, STAMP_BY_ID, STAMPS, type StampDef } from '../stamps';
+import { CATEGORIES, categoryName, STAMP_BY_ID, STAMPS, WORLD_CATEGORIES, type StampDef } from '../stamps';
 import { TOOL_INTENT } from './chrome';
 import { iconBtn, lazyThumb, miniSlider, toggle } from './common';
 import { t } from '../i18n';
 
 const CATS: string[] = ['all', 'recent', ...CATEGORIES, 'lights', 'mine'];
+const WORLD_CATS: string[] = ['all', 'recent', ...WORLD_CATEGORIES, 'mine'];
+/** Battle maps and world maps each get their own set of props. */
+let worldMode = false;
+const pool = () => STAMPS.filter((s) => !!s.world === worldMode);
 const RECENT_KEY = 'cartografo-recent-props';
 /** Recently picked props, newest first (per browser). */
 function recent(): string[] {
-  try { return (JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as string[]).filter((id) => STAMP_BY_ID.has(id) || id.startsWith('asset:')); } catch { return []; }
+  try { return (JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as string[]).filter((id) => (STAMP_BY_ID.has(id) && !!STAMP_BY_ID.get(id)!.world === worldMode) || id.startsWith('asset:')); } catch { return []; }
 }
 function remember(id: string) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...recent().filter((x) => x !== id)].slice(0, 24))); } catch { /* storage unavailable */ }
@@ -18,9 +22,10 @@ function remember(id: string) {
 const CAT_ICON: Record<string, string> = {
   all: '✦', recent: '🕘', furniture: '🪑', kitchen: '🍺', workshop: '⚒️', arcane: '🔮', temple: '🕯️', dungeon: '⛓️', caves: '💎', nature: '🌳', town: '🏘️',
   camp: '⛺', nautical: '⚓', treasure: '💰', christmas: '🎄', fantasy: '🍄', decor: '🦴', lights: '💡', mine: '🖼️',
+  w_terrain: '⛰️', w_places: '🏰', w_sea: '🧭',
 };
 const catLabel = (c: string) => c === 'all' ? t('All') : c === 'recent' ? t('Recent') : c === 'lights' ? t('Lights') : c === 'mine' ? t('My assets') : categoryName(c);
-const catCount = (c: string) => c === 'all' ? STAMPS.length : c === 'recent' ? recent().length : c === 'lights' ? STAMPS.filter((s) => s.light).length : c === 'mine' ? assets.list('stamp').length : STAMPS.filter((s) => s.cat === c).length;
+const catCount = (c: string) => c === 'all' ? pool().length : c === 'recent' ? recent().length : c === 'lights' ? pool().filter((s) => s.light).length : c === 'mine' ? assets.list('stamp').length : STAMPS.filter((s) => s.cat === c).length;
 /** Case- and accent-insensitive search over name, id, tags and category. */
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const haystack = new Map<string, string>();
@@ -38,14 +43,19 @@ export function renderDrawer(ed: Editor) {
   ed.stage.classList.toggle('furnishing', show);
   if (!show) return;
   const o = ed.opts.stamp, u = ed.ui;
+  worldMode = ed.rt.doc.kind === 'world';
+  const catList = worldMode ? WORLD_CATS : CATS;
+  if (!catList.includes(u.stampCat)) u.stampCat = worldMode ? 'w_terrain' : 'furniture';
+  const def = STAMP_BY_ID.get(o.type);
+  if (def && !!def.world !== worldMode) o.type = worldMode ? 'w_mountain' : 'barrel';
   const grid = h('div', { class: 'lib-grid' });
   const fillGrid = () => { grid.innerHTML = ''; grid.append(...tiles(ed)); };
   const search = h('input', {
-    type: 'text', value: u.search, placeholder: t('Search: barrel, torch, tree…'), 'aria-label': t('Search props'),
+    type: 'text', value: u.search, placeholder: worldMode ? t('Search: mountain, castle, ship…') : t('Search: barrel, torch, tree…'), 'aria-label': t('Search props'),
     oninput: () => { u.search = search.value; fillGrid(); },
   });
   const cats = h('div', { class: 'chips lib-cats', onwheel: (e: WheelEvent) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { cats.scrollLeft += e.deltaY; e.preventDefault(); } } },
-    ...CATS.filter((c) => c !== 'recent' || recent().length).map((c) => h('button', {
+    ...catList.filter((c) => c !== 'recent' || recent().length).map((c) => h('button', {
       class: 'chip' + (c === u.stampCat && !u.search ? ' on' : ''), 'aria-pressed': String(c === u.stampCat && !u.search), 'aria-label': catLabel(c), title: catLabel(c),
       onclick: () => { u.stampCat = c; u.search = ''; ed.refreshUI(); },
     }, h('span', { class: 'chip-ico', 'aria-hidden': 'true' }, CAT_ICON[c] || '•'), catLabel(c), h('small', { class: 'chip-n' }, String(catCount(c))))));
@@ -90,7 +100,7 @@ function tiles(ed: Editor): HTMLElement[] {
   const out: HTMLElement[] = [];
   const mine = () => assets.list('stamp').map((a) => tile(a.name, assets.urls.get(a.id) || '', ed.tool === 'stamp' && o.type === 'asset:' + a.id, pick('asset:' + a.id)));
   if (q) {
-    for (const s of STAMPS) if (matches(s, q)) out.push(tile(s.name, lazyThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
+    for (const s of pool()) if (matches(s, q)) out.push(tile(s.name, lazyThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
     out.push(...mine().filter((t) => (t.title || '').toLowerCase().includes(q)));
     if (!out.length) out.push(h('p', { class: 'hint' }, t('No props found.')));
     return out;
@@ -116,7 +126,7 @@ function tiles(ed: Editor): HTMLElement[] {
   if (u.stampCat === 'lights') {
     out.push(tile(t('Invisible light'), h('span', { class: 'lib-ico' }, icon('light', 30)), ed.tool === 'light', () => ed.setTool('light')));
   }
-  for (const s of STAMPS) {
+  for (const s of pool()) {
     if (u.stampCat === 'lights' ? !s.light : u.stampCat !== 'all' && s.cat !== u.stampCat) continue;
     out.push(tile(s.name, lazyThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
   }

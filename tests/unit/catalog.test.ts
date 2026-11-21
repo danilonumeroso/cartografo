@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { CATEGORIES, STAMP_BY_ID, STAMPS } from '../../src/stamps';
+import { CATEGORIES, STAMP_BY_ID, STAMPS, WORLD_CATEGORIES } from '../../src/stamps';
 import { TEXTURES, WALL_TEXTURES } from '../../src/textures';
 import { WALL_TEX } from '../../src/engine';
 import { WALL_NAMES, WALL_SWATCH } from '../../src/ui/common';
@@ -20,9 +20,9 @@ it('keeps every stamp id unique and every original id available', () => {
 });
 
 it('gives every stamp a known category, a sane size, layer and light', () => {
-  const cats = new Set<string>(CATEGORIES);
+  const cats = new Set<string>(CATEGORIES), worldCats = new Set<string>(WORLD_CATEGORIES);
   for (const s of STAMPS) {
-    expect(cats.has(s.cat), `${s.id} category ${s.cat}`).toBe(true);
+    expect((s.world ? worldCats : cats).has(s.cat), `${s.id} category ${s.cat}`).toBe(true);
     expect(s.w > 0 && s.w <= 6 && s.h > 0 && s.h <= 12, `${s.id} size`).toBe(true);
     expect([0, 1, 2]).toContain(s.layer);
     expect(s.name.trim()).not.toBe('');
@@ -33,7 +33,7 @@ it('gives every stamp a known category, a sane size, layer and light', () => {
     }
   }
   // Every category has something in it.
-  for (const c of CATEGORIES) expect(STAMPS.some((s) => s.cat === c), c).toBe(true);
+  for (const c of [...CATEGORIES, ...WORLD_CATEGORIES]) expect(STAMPS.some((s) => s.cat === c), c).toBe(true);
 });
 
 it('defines textures and wall styles consistently', () => {

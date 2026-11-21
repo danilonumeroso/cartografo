@@ -11,6 +11,8 @@ export class Fog {
   changed = false;
   /** Incremented on every edit, so callers can detect new changes. */
   version = 0;
+  /** Texture of the covered areas: dark clouds, or parchment on world maps. */
+  tex = 'fog';
 
   constructor(W: number, H: number) {
     this.W = W; this.H = H;
@@ -34,7 +36,7 @@ export class Fog {
     c.save();
     c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
     c.clearRect(r.x, r.y, r.w, r.h);
-    fillPattern(c, getTexture('fog'), 0, 0, this.mw, this.mh, 0.5);
+    fillPattern(c, getTexture(this.tex), 0, 0, this.mw, this.mh, this.tex === 'fog' ? 0.5 : 1);
     c.globalCompositeOperation = 'destination-in';
     c.drawImage(this.mask, 0, 0);
     c.restore();

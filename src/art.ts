@@ -16,6 +16,8 @@ export interface StampDef {
   light?: { radius: number; color: string; intensity: number };
   /** Extra search words (English, lower case). */
   tags?: string;
+  /** Drawn for world/region maps instead of battle maps. */
+  world?: boolean;
   draw: Draw;
 }
 

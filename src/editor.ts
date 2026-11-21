@@ -3,10 +3,12 @@ import { Channel, Msg } from './channel';
 import { h, icon, toast } from './dom';
 import { MARGIN } from './engine';
 import { generate, GenKind } from './generate';
-import { DungeonParams, generateDungeon } from './dungeon';
+import { DEFAULT_WORLD, generateWorld, WorldParams } from './worldgen';
+import { DungeonParams, generateDungeon, randomSeed } from './dungeon';
+import { hexCenter } from './util';
 import { History } from './history';
 import {
-  CELL, Combat, MIN_SIZE, DoorKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
+  CELL, Combat, MIN_SIZE, DoorKind, PathKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, newWorldDoc, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
 } from './model';
 import { buildTopbar, buildZoom, Intent, renderDock, renderRail, TOOL_INTENT, updateTopbar } from './ui/chrome';
 import { renderDrawer } from './ui/drawer';
@@ -22,10 +24,10 @@ import { canvasToBlob, clamp, clipRect, ctx2d, debounce, distToSeg, expandRect, 
 import { t } from './i18n';
 
 export type Mode = 'edit' | 'session';
-export type Tool = 'select' | 'terrain' | 'room' | 'cave' | 'wall' | 'door' | 'stamp' | 'light' | 'token' | 'text' | 'marker' | 'measure' | 'fog' | 'ping';
-export type SelKind = 'stamp' | 'room' | 'wall' | 'door' | 'light' | 'label' | 'marker' | 'token';
+export type Tool = 'select' | 'terrain' | 'room' | 'cave' | 'wall' | 'door' | 'path' | 'stamp' | 'light' | 'token' | 'text' | 'marker' | 'measure' | 'fog' | 'ping';
+export type SelKind = 'stamp' | 'room' | 'wall' | 'path' | 'door' | 'light' | 'label' | 'marker' | 'token';
 export interface Sel { kind: SelKind; id: string }
-export const SEL_KEY: Record<SelKind, keyof MapDoc> = { stamp: 'stamps', room: 'rooms', wall: 'walls', door: 'doors', light: 'lights', label: 'labels', marker: 'markers', token: 'tokens' };
+export const SEL_KEY: Record<SelKind, keyof MapDoc> = { stamp: 'stamps', room: 'rooms', wall: 'walls', path: 'paths', door: 'doors', light: 'lights', label: 'labels', marker: 'markers', token: 'tokens' };
 
 export const EDIT_TOOLS: { id: Tool; name: string; key: string }[] = [
   { id: 'select', name: t('Select / move'), key: 'V' },
@@ -76,6 +78,7 @@ export class Editor {
     room: { shape: 'rect' as 'rect' | 'poly', floor: 'flagstone', zone: false },
     cave: { size: 2, erase: false },
     wall: { style: 'stone' as WallStyle },
+    path: { kind: 'river' as PathKind, width: 12 },
     door: { kind: 'wood' as DoorKind, width: 1 },
     stamp: { type: 'barrel', scale: 1, jitter: 0.12, randomRot: true, scatter: false, spacing: 1.2, snap: false },
     light: { radius: 4, color: '#ffb35a', intensity: 0.9, flicker: true },
@@ -194,13 +197,15 @@ export class Editor {
     if (this.mode === 'session') this.channel.send({ t: 'map', id });
   }
 
-  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string } }) {
+  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string }; world?: { params: WorldParams; seed: string } }) {
     if (this.rt) await this.saveNow();
     const bg = o.template === 'outdoor' ? 'grass' : o.template === 'interior' ? 'wood' : 'rock';
     const size = (v: number) => Math.max(MIN_SIZE, Math.min(80, Math.round(v) || MIN_SIZE));
-    const doc = newDoc(o.name, size(o.cols), size(o.rows), bg);
+    const world = o.template === 'world';
+    const doc = world ? newWorldDoc(o.name, size(o.cols), size(o.rows)) : newDoc(o.name, size(o.cols), size(o.rows), bg);
     const rt = new MapRuntime(doc);
-    if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);
+    if (world) generateWorld(rt, o.world?.params ?? DEFAULT_WORLD, o.world?.seed ?? randomSeed('WORLD'));
+    else if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);
     else if (['dungeon', 'cave', 'forest', 'tavern', 'winter'].includes(o.template)) generate(rt, o.template as GenKind);
     this.showBusy(t('Painting the map…'));
     await nextFrame();
@@ -214,6 +219,10 @@ export class Editor {
 
   async regenerate(kind: GenKind) {
     await this.regenerateWith(() => generate(this.rt, kind));
+  }
+  /** Replace the current world map with a newly generated world. */
+  async applyWorld(params: WorldParams, seed: string) {
+    await this.regenerateWith(() => generateWorld(this.rt, params, seed));
   }
   /** Replace the current map content with a dungeon built from generator parameters. */
   async applyDungeon(params: DungeonParams, seed: string) {
@@ -468,6 +477,10 @@ export class Editor {
     for (const l of d.lights) if (Math.hypot(x - l.x, y - l.y) < 16 / z) return { kind: 'light', id: l.id };
     const order = d.stamps.map((s, i) => [s, i] as [Stamp, number]).sort((a, b) => stampLayer(b[0]) - stampLayer(a[0]) || b[1] - a[1]);
     for (const [s] of order) if (this.inStamp(s, x, y)) return { kind: 'stamp', id: s.id };
+    for (let i = (d.paths?.length ?? 0) - 1; i >= 0; i--) {
+      const p = d.paths[i], tol = Math.max(14 / z, p.width / 2 + 4);
+      for (let k = 2; k < p.pts.length; k += 2) if (distToSeg(x, y, p.pts[k - 2], p.pts[k - 1], p.pts[k], p.pts[k + 1]) < tol) return { kind: 'path', id: p.id };
+    }
     for (let i = d.walls.length - 1; i >= 0; i--) {
       const w = d.walls[i];
       for (let k = 2; k < w.pts.length; k += 2) if (distToSeg(x, y, w.pts[k - 2], w.pts[k - 1], w.pts[k], w.pts[k + 1]) < 14) return { kind: 'wall', id: w.id };
@@ -493,10 +506,18 @@ export class Editor {
   snapHalf(x: number, y: number): [number, number] { const g = CELL / 2; return [Math.round(x / g) * g, Math.round(y / g) * g]; }
   snapCenter(x: number, y: number): [number, number] { return [(Math.floor(x / CELL) + 0.5) * CELL, (Math.floor(y / CELL) + 0.5) * CELL]; }
   snapToken(t: Token) {
+    if (this.rt.doc.grid.shape === 'hex') { [t.x, t.y] = hexCenter(t.x, t.y); return; }
     const n = TOKEN_CELLS[t.size];
     if (n < 1) { const g = CELL / 2; t.x = (Math.floor(t.x / g) + 0.5) * g; t.y = (Math.floor(t.y / g) + 0.5) * g; }
     else if (n % 2) [t.x, t.y] = this.snapCenter(t.x, t.y);
     else [t.x, t.y] = this.snapCorner(t.x, t.y);
+  }
+  /** On world maps the fog clears around player characters as they travel. */
+  revealAround(tok: Token) {
+    const doc = this.rt.doc, r = doc.sight ?? 0;
+    if (doc.kind !== 'world' || tok.kind !== 'pc' || !doc.fogEnabled || r <= 0 || this.mode !== 'session') return;
+    this.rt.fog.dab(tok.x, tok.y, r * CELL, true, 0.7);
+    this.requestRender();
   }
   snapDoor(x: number, y: number, width: number): { x: number; y: number; rot: number } {
     const off = width % 2 ? 0.5 : 0;
@@ -562,6 +583,7 @@ export class Editor {
         return;
       }
       case 'wall': this.addDraftPoint(e.altKey ? [x, y] : this.snapCorner(x, y), false); return;
+      case 'path': this.addDraftPoint([x, y], false); return;
       case 'door': {
         const hit = this.hit(x, y, true);
         if (hit?.kind === 'door') { this.toggleDoor(hit.id); return; }
@@ -592,6 +614,7 @@ export class Editor {
         if (this.mode === 'session' && o.kind === 'monster') tok.hidden = true;
         this.snapToken(tok);
         this.mutate(t('Token'), () => { doc.tokens.push(tok); if (doc.combat.active) doc.combat.members.push(tok.id); });
+        this.revealAround(tok);
         return;
       }
       case 'text': {
@@ -752,7 +775,7 @@ export class Editor {
       case 'move': {
         const o = this.getSel();
         if (o && d.moved) {
-          if (this.sel!.kind === 'token') this.snapToken(o);
+          if (this.sel!.kind === 'token') { this.snapToken(o); this.revealAround(o); }
           if (this.sel!.kind === 'door' && !d.alt) Object.assign(o, this.snapDoor(o.x, o.y, o.width));
           this.commit(t('Move'), d.before);
         }
@@ -767,7 +790,7 @@ export class Editor {
   }
 
   private onDbl(e: MouseEvent) {
-    if ((this.tool === 'room' && this.opts.room.shape === 'poly') || this.tool === 'wall') { this.finishDraft(); return; }
+    if ((this.tool === 'room' && this.opts.room.shape === 'poly') || this.tool === 'wall' || this.tool === 'path') { this.finishDraft(); return; }
     if (this.tool === 'select' && this.mode === 'edit') {
       const [x, y] = this.toWorld(e);
       const hit = this.hit(x, y);
@@ -818,7 +841,9 @@ export class Editor {
         e.preventDefault();
         const st = this.sel.kind === 'token' || e.shiftKey ? CELL : CELL / 10;
         const dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0, dy = e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0;
-        this.mutate(t('Move'), () => { o.x += dx; o.y += dy; }, 'nudge:' + o.id);
+        const hex = this.sel.kind === 'token' && this.rt.doc.grid.shape === 'hex';
+        this.mutate(t('Move'), () => { o.x += dx; o.y += dy * (hex ? 0.866 : 1); if (hex) [o.x, o.y] = hexCenter(o.x + (dy ? (dx || CELL) / 2 : 0), o.y); }, 'nudge:' + o.id);
+        if (this.sel.kind === 'token') this.revealAround(o);
       }
       return;
     }
@@ -851,6 +876,9 @@ export class Editor {
 
   // ======================================================================== tools
   setTool(t: Tool) {
+    // world maps have no rooms, caves, walls or doors: building means drawing routes
+    if (this.rt?.doc.kind === 'world' && (t === 'room' || t === 'cave' || t === 'wall' || t === 'door')) t = 'path';
+    if (this.rt?.doc.kind !== 'world' && t === 'path') t = 'room';
     this.tool = t;
     if (this.mode === 'edit') this.lastTool[TOOL_INTENT[t]] = t;
     this.draft = null; this.rectDraft = null;
@@ -930,9 +958,11 @@ export class Editor {
     if (o.snap) [x, y] = this.snapHalf(x, y);
     const isAsset = o.type.startsWith('asset:');
     if (!isAsset && !STAMP_BY_ID.get(o.type)) return;
+    // world icons are drawn in perspective: they must stay upright
+    const upright = !!STAMP_BY_ID.get(o.type)?.world;
     const s: Stamp = {
       id: uid(), type: o.type, x, y,
-      rot: o.randomRot ? Math.random() * Math.PI * 2 : 0,
+      rot: o.randomRot && !upright ? Math.random() * Math.PI * 2 : 0,
       scale: o.scale * (1 + (Math.random() * 2 - 1) * o.jitter),
       variant: Math.floor(Math.random() * VARIANTS),
       flip: !isAsset && Math.random() < 0.5,
@@ -957,6 +987,9 @@ export class Editor {
     else if (this.tool === 'wall' && d.length >= 4) {
       const id = uid();
       this.mutate(t('Wall'), () => this.rt.doc.walls.push({ id, pts: d, style: this.opts.wall.style }));
+    } else if (this.tool === 'path' && d.length >= 4) {
+      const id = uid(), o = this.opts.path;
+      this.mutate(t('Path'), () => this.rt.doc.paths.push({ id, pts: d, kind: o.kind, width: o.width }));
     }
     this.requestRender();
   }
@@ -1112,6 +1145,7 @@ export class Editor {
       case 'room': return this.opts.room.zone ? t('Draw an invisible zone you can reveal with one click during play') : this.opts.room.shape === 'rect' ? t('Drag on the grid to create a room — walls draw themselves') : t('Click the corners · double-click or Enter to close');
       case 'cave': return this.opts.cave.erase ? t('Drag to fill with rock') : t('Drag to dig tunnels with natural walls');
       case 'wall': return t('Click to add points · double-click or Enter to finish · Alt for free points');
+      case 'path': return t('Click along the route · double-click or Enter to finish');
       case 'door': return t('Click a grid edge · click an existing door to open it');
       case 'text': return t('Click on the map to write');
       case 'marker': return t('Click to place a marker with secret notes');
@@ -1202,14 +1236,14 @@ export class Editor {
     }
     if (this.draft) {
       const pts = [...this.draft];
-      if (this.pointer) pts.push(...(this.tool === 'room' ? this.snapHalf(...this.pointer) : this.snapCorner(...this.pointer)));
+      if (this.pointer) pts.push(...(this.tool === 'room' ? this.snapHalf(...this.pointer) : this.tool === 'path' ? this.pointer : this.snapCorner(...this.pointer)));
       ctx.beginPath();
       for (let i = 0; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
       if (this.tool === 'room') { ctx.closePath(); ctx.fillStyle = 'rgba(255,220,120,0.18)'; ctx.fill(); }
       ctx.strokeStyle = '#ffd36b'; ctx.lineWidth = (this.tool === 'wall' ? 4 : 2) / z; ctx.stroke();
       for (let i = 0; i < this.draft.length; i += 2) { ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.arc(this.draft[i], this.draft[i + 1], 4 / z, 0, Math.PI * 2); ctx.fill(); }
     }
-    if (this.measure) drawMeasure(ctx, this.measure.a, this.measure.b, z, rt.doc.grid.feet);
+    if (this.measure) drawMeasure(ctx, this.measure.a, this.measure.b, z, rt.doc.grid);
     const now = performance.now();
     this.pings = this.pings.filter((p) => now - p.t < 1600);
     for (const p of this.pings) drawPing(ctx, p.x, p.y, now - p.t, z);
@@ -1274,7 +1308,7 @@ export class Editor {
         }
         break;
       }
-      case 'room': case 'wall': {
+      case 'room': case 'wall': case 'path': {
         ctx.beginPath();
         for (let i = 0; i < o.pts.length; i += 2) ctx.lineTo(o.pts[i], o.pts[i + 1]);
         if (this.sel.kind === 'room') ctx.closePath();

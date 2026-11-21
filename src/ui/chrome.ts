@@ -1,13 +1,13 @@
 import { closePopover, h, icon, popover } from '../dom';
 import type { Editor, Tool } from '../editor';
 import { FONTS, MARKER_ICONS, TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, TokenKind, TokenSize, WallStyle } from '../model';
-import { TEXTURES } from '../textures';
-import { DOOR_NAMES, FLOORS, iconBtn, listPicker, miniSlider, sep, subBtn, texPicker, toggle, TOKEN_PRESETS, WALL_NAMES, WALL_SWATCH } from './common';
+import { BIOMES, TEXTURES } from '../textures';
+import { DOOR_NAMES, FLOORS, iconBtn, PATH_NAMES, PATH_WIDTH, listPicker, miniSlider, sep, subBtn, texPicker, toggle, TOKEN_PRESETS, WALL_NAMES, WALL_SWATCH } from './common';
 import { t } from '../i18n';
 
 export type Intent = 'select' | 'paint' | 'build' | 'furnish' | 'annotate';
 export const TOOL_INTENT: Record<Tool, Intent> = {
-  select: 'select', terrain: 'paint', room: 'build', cave: 'build', wall: 'build', door: 'build',
+  select: 'select', terrain: 'paint', room: 'build', cave: 'build', wall: 'build', door: 'build', path: 'build',
   stamp: 'furnish', light: 'furnish', token: 'annotate', text: 'annotate', marker: 'annotate', measure: 'annotate', fog: 'select', ping: 'select',
 };
 export const INTENTS: { id: Intent; name: string; icon: string; tool: Tool; key: string }[] = [
@@ -70,7 +70,7 @@ export function renderRail(ed: Editor) {
   for (const it of INTENTS) {
     rail.appendChild(h('button', {
       class: 'rail-btn' + (cur === it.id ? ' on' : ''), 'aria-pressed': String(cur === it.id), title: `${it.name} (${it.key})`,
-      onclick: () => ed.setTool(ed.lastTool[it.id] || it.tool),
+      onclick: () => ed.setTool(ed.lastTool[it.id] || (it.id === 'build' && ed.rt.doc.kind === 'world' ? 'path' : it.tool)),
     }, icon(it.icon, 20), h('span', null, it.name)));
   }
 }
@@ -119,10 +119,13 @@ export function renderDock(ed: Editor) {
     if (ed.tool === 'token') bar.append(sep(), ...tokenOptions(ed));
     return;
   }
+  const world = ed.rt.doc.kind === 'world';
   if (intent === 'paint') {
     const tok = o.terrain;
+    const ids = world ? ['land', ...BIOMES] : TEXTURES.filter((x) => !x.world && x.id !== 'land').map((x) => x.id);
+    if (!ids.includes(tok.tex)) tok.tex = ids[0];
     bar.append(
-      texPicker('Texture', TEXTURES.map((x) => x.id), tok.tex, (id) => { tok.tex = id; tok.erase = false; rr(); }),
+      texPicker(world ? t('Terrain') : 'Texture', ids, tok.tex, (id) => { tok.tex = id; tok.erase = false; rr(); }),
       sep(),
       subBtn(t('Paint'), 'paint', !tok.erase, () => { tok.erase = false; rr(); }),
       subBtn(t('Erase'), 'x', tok.erase, () => { tok.erase = true; rr(); }),
@@ -130,6 +133,12 @@ export function renderDock(ed: Editor) {
       miniSlider(t('Size'), tok.size, 0.25, 12, 0.25, (v) => { tok.size = v; ed.requestRender(); }, (v) => t('{n} sq.', { n: v })),
       miniSlider(t('Softness'), 1 - tok.hard, 0, 0.95, 0.05, (v) => { tok.hard = 1 - v; }, (v) => Math.round(v * 100) + '%'),
     );
+    return;
+  }
+  if (intent === 'build' && world) {
+    const pk = o.path;
+    bar.append(...PATH_NAMES.map(([k, name, ico]) => subBtn(name, ico, ed.tool === 'path' && pk.kind === k, set('path', () => { pk.kind = k; pk.width = PATH_WIDTH[k]; }))), sep(),
+      miniSlider(t('Width'), pk.width, 3, 30, 1, (v) => { pk.width = v; }, (v) => String(v)));
     return;
   }
   if (intent === 'build') {
@@ -189,6 +198,11 @@ export function renderDock(ed: Editor) {
       bar.append(ib, colorDot(t('Color'), m.color, (v) => { m.color = v; }));
     } else if (ed.tool === 'token') {
       bar.append(...tokenOptions(ed));
+    } else if (ed.tool === 'measure' && world) {
+      const g = ed.rt.doc.grid;
+      const inp = h('input', { type: 'number', value: g.feet, min: 0.5, max: 500, step: 0.5, class: 'num-sm', 'aria-label': t('Distance per hex'), onchange: () => { g.feet = +inp.value || 6; ed.changed('settings'); } });
+      bar.append(h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, t('Distance per hex')), inp),
+        listPicker<'mi' | 'km'>(t('Unit'), [['mi', t('Miles')], ['km', t('Kilometres')]], g.unit === 'km' ? 'km' : 'mi', (v) => { g.unit = v; ed.changed('settings'); rr(); }));
     } else if (ed.tool === 'measure') {
       const inp = h('input', { type: 'number', value: ed.rt.doc.grid.feet, min: 1, max: 100, class: 'num-sm', 'aria-label': t('Feet per square'), onchange: () => { ed.rt.doc.grid.feet = +inp.value || 5; ed.changed('settings'); } });
       bar.append(h('label', { class: 'mini-slider' }, h('span', { class: 'mini-label' }, t('Feet per square')), inp));

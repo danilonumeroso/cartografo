@@ -399,6 +399,7 @@ kbd { background: var(--field); border: 1px solid var(--line); border-bottom-wid
 .gen-adv-body .gen-sec h2 { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--gold-hi); }
 .gen-adv-body { display: flex; flex-direction: column; gap: 22px; margin-top: -10px; }
 .gen-styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.gen-styles-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .gen-style { height: 66px; border-radius: 11px; border: 1px solid #2e3340; background: var(--raise); color: var(--text2); font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px; text-align: center; }
 .gen-style:hover { border-color: var(--line2); }
 .gen-style.on { border: 2px solid var(--gold); background: #2a2416; color: var(--gold-hi); font-weight: 600; }

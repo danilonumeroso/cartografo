@@ -1,6 +1,6 @@
 import { assets } from './assets';
 import { WALL_TEX } from './engine';
-import { CELL, CONDITIONS, Door, Label, Light, Marker, Stamp, Token, TOKEN_CELLS, TOKEN_KIND_COLORS } from './model';
+import { CELL, CONDITIONS, Door, GridSettings, Label, Light, MapPath, Marker, Stamp, Token, TOKEN_CELLS, TOKEN_KIND_COLORS } from './model';
 import type { MapRuntime } from './runtime';
 import { STAMP_BY_ID, STAMP_PAD, stampImage } from './stamps';
 import { getTexture } from './textures';
@@ -78,6 +78,7 @@ export function renderScene(ctx: C2D, rt: MapRuntime, view: View, vw: number, vh
   const vis = visibleRect(view, vw, vh);
 
   const stamps = doc.stamps;
+  if (doc.paths?.length) drawPaths(ctx, doc.paths);
   drawStamps(ctx, stamps, 0, vis, o);
   drawWalls(ctx, rt);
   for (const d of doc.doors) drawDoor(ctx, d, o.player);
@@ -279,6 +280,7 @@ function drawWeather(ctx: C2D, rt: MapRuntime, vis: { x: number; y: number; w: n
 
 function drawGrid(ctx: C2D, rt: MapRuntime, vis: { x: number; y: number; w: number; h: number }, z: number) {
   const g = rt.doc.grid;
+  if (g.shape === 'hex') { drawHexGrid(ctx, rt, vis, z); return; }
   const x0 = Math.max(0, Math.floor(vis.x / CELL)), x1 = Math.min(rt.doc.cols, Math.ceil((vis.x + vis.w) / CELL));
   const y0 = Math.max(0, Math.floor(vis.y / CELL)), y1 = Math.min(rt.doc.rows, Math.ceil((vis.y + vis.h) / CELL));
   ctx.save();
@@ -288,6 +290,87 @@ function drawGrid(ctx: C2D, rt: MapRuntime, vis: { x: number; y: number; w: numb
   for (let x = x0; x <= x1; x++) { ctx.moveTo(x * CELL, y0 * CELL); ctx.lineTo(x * CELL, y1 * CELL); }
   for (let y = y0; y <= y1; y++) { ctx.moveTo(x0 * CELL, y * CELL); ctx.lineTo(x1 * CELL, y * CELL); }
   ctx.stroke();
+  ctx.restore();
+}
+
+/** Pointy-top hexes, one cell wide: neighbouring centres are exactly one cell apart. */
+export const HEX_R = CELL / Math.sqrt(3);
+function drawHexGrid(ctx: C2D, rt: MapRuntime, vis: { x: number; y: number; w: number; h: number }, z: number) {
+  const g = rt.doc.grid, dy = HEX_R * 1.5;
+  const r0 = Math.max(0, Math.floor(vis.y / dy) - 1), r1 = Math.min(Math.ceil(rt.H / dy), Math.ceil((vis.y + vis.h) / dy) + 1);
+  const c0 = Math.max(-1, Math.floor(vis.x / CELL) - 1), c1 = Math.min(Math.ceil(rt.W / CELL), Math.ceil((vis.x + vis.w) / CELL) + 1);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, rt.W, rt.H); ctx.clip();
+  ctx.strokeStyle = rgba(g.color, g.opacity);
+  ctx.lineWidth = Math.max(1 / z, 1.6);
+  ctx.beginPath();
+  for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) {
+    const cx = col * CELL + (row % 2 ? CELL / 2 : 0), cy = row * dy;
+    // three edges per hex, so shared edges are stroked once
+    for (let k = 3; k <= 6; k++) {
+      const a = (Math.PI / 3) * k - Math.PI / 2, px = cx + Math.cos(a) * HEX_R, py = cy + Math.sin(a) * HEX_R;
+      k === 3 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Smooth polyline through the points (quadratic curves via midpoints). */
+function smoothPath(ctx: C2D, pts: number[]) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0], pts[1]);
+  if (pts.length === 4) { ctx.lineTo(pts[2], pts[3]); return; }
+  for (let i = 2; i < pts.length - 2; i += 2) ctx.quadraticCurveTo(pts[i], pts[i + 1], (pts[i] + pts[i + 2]) / 2, (pts[i + 1] + pts[i + 3]) / 2);
+  ctx.lineTo(pts[pts.length - 2], pts[pts.length - 1]);
+}
+
+/** Chaikin corner cutting: rounds a polyline while keeping its end points. */
+export function chaikin(pts: number[], iterations = 2): number[] {
+  let p = pts;
+  for (let it = 0; it < iterations; it++) {
+    if (p.length < 6) return p;
+    const out = [p[0], p[1]];
+    for (let i = 0; i < p.length - 2; i += 2) {
+      const x0 = p[i], y0 = p[i + 1], x1 = p[i + 2], y1 = p[i + 3];
+      out.push(x0 * 0.75 + x1 * 0.25, y0 * 0.75 + y1 * 0.25, x0 * 0.25 + x1 * 0.75, y0 * 0.25 + y1 * 0.75);
+    }
+    out.push(p[p.length - 2], p[p.length - 1]);
+    p = out;
+  }
+  return p;
+}
+
+/** Rivers, roads, trails and borders on world maps. */
+export function drawPaths(ctx: C2D, paths: MapPath[]) {
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const order: Record<string, number> = { border: 0, river: 1, road: 2, trail: 3 };
+  for (const p of [...paths].sort((a, b) => order[a.kind] - order[b.kind])) {
+    if (p.pts.length < 4) continue;
+    const w = p.width;
+    if (p.kind === 'river') {
+      // widen from source to mouth by drawing short runs of growing width along a rounded line
+      const sp = chaikin(p.pts, 3), n = sp.length / 2, run = 6;
+      for (const [col, extra] of [['#1c2a34', 3], ['#5a9dbc', 0], ['rgba(220,245,255,0.5)', -w * 0.62]] as const) {
+        for (let i = 0; i < n - 1; i += run) {
+          const k = 0.35 + 0.65 * (i / Math.max(1, n - 2));
+          ctx.beginPath(); ctx.moveTo(sp[i * 2], sp[i * 2 + 1]);
+          for (let j = i + 1; j <= Math.min(n - 1, i + run); j++) ctx.lineTo(sp[j * 2], sp[j * 2 + 1]);
+          ctx.strokeStyle = col; ctx.lineWidth = Math.max(0.8, w * k + extra); ctx.stroke();
+        }
+      }
+    } else if (p.kind === 'road') {
+      smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(60,40,20,0.55)'; ctx.lineWidth = w + 3; ctx.stroke();
+      smoothPath(ctx, p.pts); ctx.strokeStyle = '#c9a874'; ctx.lineWidth = w; ctx.stroke();
+      ctx.setLineDash([w * 1.6, w * 1.4]); smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(110,80,40,0.55)'; ctx.lineWidth = Math.max(1, w * 0.25); ctx.stroke(); ctx.setLineDash([]);
+    } else if (p.kind === 'trail') {
+      ctx.setLineDash([w * 0.4, w * 1.6]); smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(70,45,20,0.85)'; ctx.lineWidth = w; ctx.stroke(); ctx.setLineDash([]);
+    } else {
+      smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(150,40,90,0.18)'; ctx.lineWidth = w * 3.5; ctx.stroke();
+      ctx.setLineDash([w * 2.2, w * 1.2, w * 0.4, w * 1.2]); smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(120,30,70,0.85)'; ctx.lineWidth = w * 0.7; ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
   ctx.restore();
 }
 
@@ -482,11 +565,24 @@ export function drawPing(ctx: C2D, x: number, y: number, age: number, z: number)
   ctx.restore();
 }
 
-export function drawMeasure(ctx: C2D, a: [number, number], b: [number, number], z: number, feetPerCell: number) {
-  const dx = Math.abs(b[0] - a[0]) / CELL, dy = Math.abs(b[1] - a[1]) / CELL;
-  // D&D 5e grid distance: every diagonal counts as 1 square
-  const squares = Math.round(Math.max(dx, dy));
-  const feet = squares * feetPerCell;
+/** Distance label for a ruler: grid squares (5e diagonals) or straight-line travel on world maps. */
+export function measureText(a: [number, number], b: [number, number], g: Pick<GridSettings, 'feet' | 'unit' | 'shape'>) {
+  const unit = g.unit || 'ft';
+  if (unit === 'ft' && g.shape !== 'hex') {
+    const dx = Math.abs(b[0] - a[0]) / CELL, dy = Math.abs(b[1] - a[1]) / CELL;
+    // D&D 5e grid distance: every diagonal counts as 1 square
+    const squares = Math.round(Math.max(dx, dy));
+    return t(squares === 1 ? '{ft} ft · {n} square' : '{ft} ft · {n} squares', { ft: squares * g.feet, n: squares });
+  }
+  const cells = Math.hypot(b[0] - a[0], b[1] - a[1]) / CELL, dist = cells * g.feet;
+  const d = dist >= 100 ? Math.round(dist) : Math.round(dist * 10) / 10;
+  // 5e travel pace: 24 miles (about 38 km) a day at a normal pace
+  const days = unit === 'ft' ? 0 : dist / (unit === 'mi' ? 24 : 38);
+  const base = `${d} ${unit}`;
+  return days >= 0.1 ? t('{dist} · {days} days on foot', { dist: base, days: Math.round(days * 10) / 10 }) : base;
+}
+
+export function drawMeasure(ctx: C2D, a: [number, number], b: [number, number], z: number, grid: Pick<GridSettings, 'feet' | 'unit' | 'shape'>) {
   ctx.save();
   ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 6 / z; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
@@ -494,7 +590,7 @@ export function drawMeasure(ctx: C2D, a: [number, number], b: [number, number], 
   ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
   ctx.setLineDash([]);
   for (const p of [a, b]) { ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.arc(p[0], p[1], 5 / z, 0, Math.PI * 2); ctx.fill(); }
-  const txt = t(squares === 1 ? '{ft} ft · {n} square' : '{ft} ft · {n} squares', { ft: feet, n: squares });
+  const txt = measureText(a, b, grid);
   ctx.font = `700 ${15 / z}px system-ui, sans-serif`;
   const tw = ctx.measureText(txt).width;
   const mx = b[0] + 14 / z, my = b[1] - 14 / z;

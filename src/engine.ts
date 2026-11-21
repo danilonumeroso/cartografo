@@ -1,9 +1,11 @@
 import { CELL, MapDoc, MASK_SCALE, WallStyle } from './model';
 import { EDGE_N, getEdgeNoise } from './noise';
-import { ABOVE, BELOW, getTexture, getTextureData, TEX_BY_ID, TS } from './textures';
+import { ABOVE, BELOW, BIOMES, getTexture, getTextureData, TEX_BY_ID, TS } from './textures';
 import { clamp, clipRect, ctx2d, expandRect, fillPattern, fit, makeCanvas, ptsBBox, Rect, rectsIntersect, smoothstep, unionRect } from './util';
 
 export const MARGIN = 48;
+/** World maps need a wider margin: the coast ripples reach far into the sea. */
+const WORLD_MARGIN = 170;
 const BLUR = 26;          // canvas shadowBlur (sigma ≈ 13 px)
 const WALL_T = 0.13;      // blur threshold where walls end (≈ 16 px thick)
 const TILE = 1024;
@@ -34,6 +36,8 @@ export class Engine {
   }
   get W() { return this.doc.cols * CELL; }
   get H() { return this.doc.rows * CELL; }
+  get world() { return this.doc.kind === 'world'; }
+  get margin() { return this.world ? WORLD_MARGIN : MARGIN; }
   get mw() { return Math.ceil(this.W * MASK_SCALE); }
   get mh() { return Math.ceil(this.H * MASK_SCALE); }
 
@@ -61,7 +65,7 @@ export class Engine {
     c.beginPath(); c.arc(mx, my, mr, 0, Math.PI * 2); c.fill();
     c.globalCompositeOperation = 'source-over';
     this.changed.add(key);
-    const pad = key === 'cave' ? MARGIN : 4;
+    const pad = key === 'cave' || key === 'land' ? this.margin : 4;
     const rect = { x: x - r - pad, y: y - r - pad, w: 2 * r + 2 * pad, h: 2 * r + 2 * pad };
     this.invalidate(rect);
     return rect;
@@ -69,7 +73,7 @@ export class Engine {
 
   invalidate(r: Rect) { this.dirty = unionRect(this.dirty, r); }
   invalidateAll() { this.dirty = { x: 0, y: 0, w: this.W, h: this.H }; }
-  invalidateRooms(pts: number[]) { this.invalidate(expandRect(ptsBBox(pts), MARGIN + 4)); }
+  invalidateRooms(pts: number[]) { this.invalidate(expandRect(ptsBBox(pts), this.margin + 4)); }
 
   flush(): Rect | null {
     if (!this.dirty) return null;
@@ -129,11 +133,11 @@ export class Engine {
     return any;
   }
 
-  private blur(src: HTMLCanvasElement, dst: HTMLCanvasElement, F: Rect) {
+  private blur(src: HTMLCanvasElement, dst: HTMLCanvasElement, F: Rect, radius = BLUR) {
     const c = fit(dst, F.w, F.h, true);
     const off = F.w + 200;
     c.shadowColor = '#fff';
-    c.shadowBlur = BLUR;
+    c.shadowBlur = radius;
     c.shadowOffsetX = off;
     c.drawImage(src, -off, 0);
     c.shadowColor = 'transparent';
@@ -167,6 +171,7 @@ export class Engine {
   }
 
   private compose(R: Rect) {
+    if (this.world) { this.composeWorld(R); return; }
     const doc = this.doc;
     const F = clipRect(expandRect(R, MARGIN), this.W, this.H)!;
     const ox = R.x - F.x, oy = R.y - F.y;
@@ -221,6 +226,76 @@ export class Engine {
     rc.globalAlpha = 1;
     rc.globalCompositeOperation = 'source-over';
 
+    ctx2d(this.cache).drawImage(this.cR, R.x, R.y);
+  }
+
+  /**
+   * World maps: open sea, painted land with biomes, and coasts drawn from the
+   * blurred land mask (ink outline, beach, shallow water and wave rings).
+   */
+  private composeWorld(R: Rect) {
+    const F = clipRect(expandRect(R, WORLD_MARGIN), this.W, this.H)!;
+    const ox = R.x - F.x, oy = R.y - F.y;
+    const rc = fit(this.cR, R.w, R.h);
+    fillPattern(rc, getTexture(this.doc.bg || 'w_ocean'), R.x, R.y, R.w, R.h);
+    const land = this.masks.get('land');
+    const ld = land ? this.eff(land, F, 0.5, 0.14, this.cCave) : null;
+    if (ld) {
+      // land body with biome overlays, cut to the coastline
+      const lc = fit(this.cRoom, R.w, R.h);
+      fillPattern(lc, getTexture('w_land'), R.x, R.y, R.w, R.h);
+      for (const id of BIOMES) this.drawOverlay(lc, id, R, false);
+      lc.globalCompositeOperation = 'destination-in';
+      lc.drawImage(this.cCave, -ox, -oy);
+      lc.globalCompositeOperation = 'source-over';
+      this.blur(this.cCave, this.cBlurA, F, 14);
+      this.blur(this.cCave, this.cBlurB, F, 150);
+      const la = ctx2d(this.cCave, true).getImageData(ox, oy, R.w, R.h).data;
+      const bs = ctx2d(this.cBlurA, true).getImageData(ox, oy, R.w, R.h).data;
+      const bl = ctx2d(this.cBlurB, true).getImageData(ox, oy, R.w, R.h).data;
+      // sea side first (under the land), then land on top, then the coast effects
+      const fc = fit(this.cFx, R.w, R.h);
+      const sea = fc.createImageData(R.w, R.h), o = sea.data;
+      const rings = [0.08, 0.15, 0.24];
+      for (let i = 3; i < o.length; i += 4) {
+        const a = la[i] / 255;
+        if (a >= 1) continue;
+        const L = bl[i] / 255;
+        if (L <= 0.005) continue;
+        // shallow water tint
+        let r = 150, g = 210, b = 215, al = smoothstep(0.02, 0.55, L) * 0.55;
+        // wave rings around the coast
+        let ring = 0;
+        for (const lv of rings) ring = Math.max(ring, 1 - clamp(Math.abs(L - lv) / 0.009, 0, 1));
+        if (ring > 0) { const k = ring * 0.55; r = r + (240 - r) * k; g = g + (250 - g) * k; b = b + (252 - b) * k; al = Math.max(al, k * 0.8); }
+        o[i - 3] = r; o[i - 2] = g; o[i - 1] = b; o[i] = al * (1 - a) * 255;
+      }
+      fc.putImageData(sea, 0, 0);
+      rc.drawImage(this.cFx, 0, 0);
+      rc.drawImage(this.cRoom, 0, 0);
+      const fx = fc.createImageData(R.w, R.h), q = fx.data;
+      for (let i = 3; i < q.length; i += 4) {
+        const s = bs[i] / 255;
+        if (s <= 0.01 || s >= 0.99) continue;
+        const a = la[i] / 255;
+        let r = 0, g = 0, b = 0, al = 0;
+        // sandy beach just inside the coast
+        if (a > 0) { const k = (1 - smoothstep(0.55, 0.9, s)) * 0.55 * a; r = 226; g = 206; b = 150; al = k; }
+        // ink coastline
+        const ink = 1 - clamp(Math.abs(s - 0.5) / 0.07, 0, 1);
+        if (ink > 0) { const k = ink * 0.95; r = r * (1 - k) + 28 * k; g = g * (1 - k) + 34 * k; b = b * (1 - k) + 40 * k; al = al + k * (1 - al); }
+        // soft shadow of the coast cast on the water
+        if (a < 1 && s < 0.5) { const k = smoothstep(0.15, 0.5, s) * 0.25 * (1 - a); if (al < k) { r = 10; g = 30; b = 45; al = k; } }
+        q[i - 3] = r; q[i - 2] = g; q[i - 1] = b; q[i] = al * 255;
+      }
+      fc.putImageData(fx, 0, 0);
+      rc.drawImage(this.cFx, 0, 0);
+    }
+    rc.globalCompositeOperation = 'soft-light';
+    rc.globalAlpha = 0.45;
+    fillPattern(rc, getTexture('variation'), R.x, R.y, R.w, R.h, 6);
+    rc.globalAlpha = 1;
+    rc.globalCompositeOperation = 'source-over';
     ctx2d(this.cache).drawImage(this.cR, R.x, R.y);
   }
 

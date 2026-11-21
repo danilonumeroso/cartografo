@@ -2,11 +2,11 @@ import { assets } from '../assets';
 import { closePopover, h, icon, pickFile, popover } from '../dom';
 import type { Editor } from '../editor';
 import {
-  CELL, CONDITIONS, Door, FONTS, hpStatus, Label, Light, MARKER_ICONS, Marker, Room, Stamp, Token, TOKEN_KIND_COLORS, TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, TokenKind, TokenSize, Wall, WallStyle,
+  CELL, CONDITIONS, Door, FONTS, hpStatus, Label, Light, MARKER_ICONS, Marker, Room, Stamp, Token, TOKEN_KIND_COLORS, TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, TokenKind, TokenSize, Wall, WallStyle, MapPath, PathKind,
 } from '../model';
 import { labelFont, markerGeom, tokenRadius } from '../render';
 import { STAMP_BY_ID, VARIANTS } from '../stamps';
-import { DOOR_NAMES, FLOORS, iconBtn, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
+import { DOOR_NAMES, FLOORS, iconBtn, PATH_NAMES, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
 import { t } from '../i18n';
 
 type M = (label: string, fn: () => void, key?: string) => void;
@@ -29,6 +29,15 @@ export function renderInspector(ed: Editor) {
       const w = o as Wall;
       box.classList.add('toolbar');
       box.append(h('span', { class: 'tb-title' }, t('Wall')), listPicker<WallStyle>(t('Style'), WALL_NAMES, w.style, (v) => { m(t('Style'), () => { w.style = v; }); ed.refreshUI(); }, (v) => WALL_SWATCH[v]), h('span', { class: 'tb-sep' }), dup, del);
+      return;
+    }
+    case 'path': {
+      const p = o as MapPath;
+      box.classList.add('toolbar');
+      box.append(h('span', { class: 'tb-title' }, t('Path')),
+        listPicker<PathKind>(t('Type'), PATH_NAMES.map(([k, n]) => [k, n] as [PathKind, string]), p.kind, (v) => { m(t('Type'), () => { p.kind = v; }); ed.refreshUI(); }),
+        miniSlider(t('Width'), p.width, 3, 30, 1, (v) => m(t('Width'), () => { p.width = v; }, 'width')),
+        h('span', { class: 'tb-sep' }), dup, del);
       return;
     }
     case 'door': {
@@ -196,7 +205,7 @@ function selBox(ed: Editor): { x0: number; y0: number; x1: number; y1: number } 
   const add = (x: number, y: number) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
   switch (ed.sel.kind) {
     case 'stamp': ed.stampHandles(o).corners.forEach((c) => add(c[0], c[1])); break;
-    case 'room': case 'wall': for (let i = 0; i < o.pts.length; i += 2) add(o.pts[i], o.pts[i + 1]); break;
+    case 'room': case 'wall': case 'path': for (let i = 0; i < o.pts.length; i += 2) add(o.pts[i], o.pts[i + 1]); break;
     case 'door': { const L = (o.width * CELL) / 2 + 10; add(o.x - L, o.y - L); add(o.x + L, o.y + L); break; }
     case 'token': { const r = tokenRadius(o); add(o.x - r, o.y - r); add(o.x + r, o.y + r); break; }
     case 'marker': { const g = markerGeom(o, z); add(g.cx - g.r, g.cy - g.r); add(o.x + g.r, o.y); break; }

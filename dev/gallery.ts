@@ -1,6 +1,6 @@
 // Developer gallery: renders every built-in stamp, texture and wall style.
 // Open http://localhost:5173/dev/gallery.html (?cat=<id>, ?ids=<a,b>, ?tex, ?variants, ?z=<zoom>).
-import { CATEGORIES, categoryName, STAMPS, stampImage, STAMP_PAD } from '../src/stamps';
+import { CATEGORIES, categoryName, STAMPS, stampImage, STAMP_PAD, WORLD_CATEGORIES } from '../src/stamps';
 import { getTexture, TEXTURES } from '../src/textures';
 import { WALL_TEX } from '../src/engine';
 import { CELL } from '../src/model';
@@ -10,6 +10,7 @@ const out = document.getElementById('out')!;
 const Z = +(q.get('z') || 0.5);
 const BG: Record<string, string> = {
   furniture: 'wood', kitchen: 'flagstone', workshop: 'dirt', arcane: 'tiles', temple: 'flagstone', dungeon: 'flagstone', caves: 'cave',
+  w_terrain: 'w_land', w_places: 'w_land', w_sea: 'w_ocean',
   nature: 'grass', town: 'cobble', camp: 'grass', nautical: 'water', treasure: 'cave', christmas: 'snow', fantasy: 'forest', decor: 'flagstone',
 };
 const bgOf = (cat: string) => q.get('bg') || BG[cat] || 'flagstone';
@@ -25,7 +26,7 @@ function fig(g: HTMLElement, cv: HTMLCanvasElement, label: string) {
 
 const tex = q.has('tex');
 if (!tex) {
-  const cats = q.get('cat') ? q.get('cat')!.split(',') : [...CATEGORIES];
+  const cats = q.get('cat') ? q.get('cat')!.split(',') : [...CATEGORIES, ...WORLD_CATEGORIES];
   const nv = q.has('variants') ? 4 : 1;
   for (const cat of cats) {
     const ids = q.get('ids')?.split(',');

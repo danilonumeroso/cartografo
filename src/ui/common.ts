@@ -1,5 +1,5 @@
 import { closePopover, h, icon, popover } from '../dom';
-import { DoorKind, TokenKind, TokenSize, WallStyle } from '../model';
+import { DoorKind, PathKind, TokenKind, TokenSize, WallStyle } from '../model';
 import { stampThumb } from '../stamps';
 import { getTexture, TEX_BY_ID, texGroup, TEXTURES, type TexGroup } from '../textures';
 import { ctx2d, makeCanvas } from '../util';
@@ -17,8 +17,11 @@ export const DOOR_NAMES: [DoorKind, string][] = [
   ['wood', t('Wood')], ['double', t('Double')], ['iron', t('Portcullis')], ['secret', t('Secret')], ['arch', t('Archway')],
   ['stone', t('Stone slab')], ['bars', t('Cell door')], ['curtain', t('Curtain')],
 ];
-export const FLOORS = TEXTURES.filter((t) => t.floor).map((t) => t.id);
+export const PATH_NAMES: [PathKind, string, string][] = [['river', t('River'), 'river'], ['road', t('Road'), 'road'], ['trail', t('Trail'), 'trail'], ['border', t('Border'), 'border']];
+export const PATH_WIDTH: Record<PathKind, number> = { river: 12, road: 7, trail: 5, border: 8 };
+export const FLOORS = TEXTURES.filter((t) => t.floor && !t.world).map((t) => t.id);
 export const TOKEN_PRESETS: { name: string; kind: TokenKind; size: TokenSize }[] = [
+  { name: t('Party'), kind: 'pc', size: 'medium' },
   { name: t('Hero'), kind: 'pc', size: 'medium' }, { name: 'Goblin', kind: 'monster', size: 'small' }, { name: t('Kobold'), kind: 'monster', size: 'small' },
   { name: t('Skeleton'), kind: 'monster', size: 'medium' }, { name: t('Orc'), kind: 'monster', size: 'medium' }, { name: t('Wolf'), kind: 'monster', size: 'medium' },
   { name: 'Ogre', kind: 'monster', size: 'large' }, { name: 'Troll', kind: 'monster', size: 'large' }, { name: t('Dragon'), kind: 'monster', size: 'huge' },
@@ -95,7 +98,7 @@ export function texPicker(caption: string, ids: string[], value: string, onPick:
       class: 'swatch' + (id === value ? ' on' : ''), title: texName(id),
       onclick: () => { closePopover(); onPick(id); },
     }, h('img', { src: texSwatch(id), alt: '' }), h('span', null, texName(id)));
-    const groups: [TexGroup, string][] = [['ground', t('Natural ground')], ['built', t('Built floors')], ['exotic', t('Exotic floors')], ['cover', t('Liquids and cover')]];
+    const groups: [TexGroup, string][] = [['w_land', t('Shape the coast: paint land, erase to flood it')], ['w_biome', t('Biomes, painted over land')], ['ground', t('Natural ground')], ['built', t('Built floors')], ['exotic', t('Exotic floors')], ['cover', t('Liquids and cover')]];
     const sections = groups.map(([g, label]) => [label, ids.filter((id) => texGroup(id) === g)] as const).filter(([, l]) => l.length);
     const body = sections.length > 1
       ? sections.flatMap(([label, list]) => [h('div', { class: 'pop-sub' }, label), h('div', { class: 'swatches' }, ...list.map(sw))])
