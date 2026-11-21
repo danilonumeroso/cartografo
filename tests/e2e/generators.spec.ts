@@ -59,7 +59,7 @@ function inside(x: number, y: number, points: number[]) {
   return odd;
 }
 
-for (const template of ['Dungeon', 'Cave', 'Forest', 'Tavern']) {
+for (const template of ['Dungeon', 'Cave', 'Forest', 'Tavern', 'Winter forest']) {
   test(template + ' creates populated, bounded terrain', async ({ page }) => {
     await home(page);
     await page.clock.setFixedTime(new Date('2026-01-01T00:00:00.042Z'));
@@ -80,7 +80,7 @@ for (const template of ['Dungeon', 'Cave', 'Forest', 'Tavern']) {
       return colors.size;
     });
     expect(colors).toBeGreaterThan(1);
-    if (template === 'Forest') expect(d.stamps.length).toBeGreaterThan(0);
+    if (template === 'Forest' || template === 'Winter forest') expect(d.stamps.length).toBeGreaterThan(0);
     if (template === 'Tavern') {
       for (const objects of [d.rooms, d.walls, d.doors]) expect(objects.length).toBeGreaterThan(0);
     }

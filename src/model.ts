@@ -8,8 +8,9 @@ export const MASK_SCALE = 0.5;
 /** Smallest supported map side, in squares. */
 export const MIN_SIZE = 10;
 
-export type WallStyle = 'stone' | 'brick' | 'wood' | 'cave';
-export type DoorKind = 'wood' | 'double' | 'iron' | 'secret' | 'arch';
+export type WallStyle = 'stone' | 'brick' | 'wood' | 'cave' | 'dark' | 'marble' | 'sandstone' | 'palisade' | 'hedge' | 'ice' | 'obsidian' | 'bone' | 'crystal';
+export type DoorKind = 'wood' | 'double' | 'iron' | 'secret' | 'arch' | 'stone' | 'bars' | 'curtain';
+export type Weather = 'none' | 'snow' | 'rain' | 'ash' | 'embers' | 'leaves';
 export type TokenSize = 'tiny' | 'small' | 'medium' | 'large' | 'huge' | 'gargantuan';
 export type TokenKind = 'pc' | 'ally' | 'npc' | 'monster';
 
@@ -37,6 +38,8 @@ export interface MapDoc {
   grid: GridSettings;
   ambient: number;
   fogEnabled: boolean;
+  /** Animated particles drawn over the map (shown on the TV too). */
+  weather: Weather;
   createdAt: number; updatedAt: number;
 }
 
@@ -51,7 +54,7 @@ export function newDoc(name: string, cols: number, rows: number, bg = 'rock'): M
     rooms: [], walls: [], doors: [], stamps: [], lights: [], labels: [], markers: [], tokens: [],
     combat: { active: false, round: 1, turn: null, members: [] },
     grid: { show: true, color: '#000000', opacity: 0.22, showPlayers: true, feet: 5 },
-    ambient: 0, fogEnabled: false, createdAt: now, updatedAt: now,
+    ambient: 0, fogEnabled: false, weather: 'none', createdAt: now, updatedAt: now,
   };
 }
 

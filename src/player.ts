@@ -270,7 +270,7 @@ export class Player {
       if (k >= 1) this.target = null;
       this.needRender = true;
     }
-    const animated = this.pings.length || (rt.doc.combat.active && rt.doc.combat.turn) || (rt.doc.ambient > 0 && (rt.doc.lights.length || rt.doc.stamps.length));
+    const animated = this.pings.length || (rt.doc.combat.active && rt.doc.combat.turn) || (rt.doc.ambient > 0 && (rt.doc.lights.length || rt.doc.stamps.length)) || (rt.doc.weather && rt.doc.weather !== 'none');
     if (animated) this.needRender = true;
     if (!this.needRender) return;
     this.needRender = false;

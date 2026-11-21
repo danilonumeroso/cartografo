@@ -1,13 +1,34 @@
 import { assets } from '../assets';
 import { h, icon, pickFile, toast } from '../dom';
 import type { Editor } from '../editor';
-import { CATEGORIES, categoryName, STAMPS } from '../stamps';
+import { CATEGORIES, categoryName, STAMP_BY_ID, STAMPS, type StampDef } from '../stamps';
 import { TOOL_INTENT } from './chrome';
-import { iconBtn, miniSlider, sThumb, toggle } from './common';
+import { iconBtn, lazyThumb, miniSlider, toggle } from './common';
 import { t } from '../i18n';
 
-const CATS: string[] = ['all', ...CATEGORIES, 'lights', 'mine'];
-const catLabel = (c: string) => c === 'all' ? t('All') : c === 'lights' ? t('Lights') : c === 'mine' ? t('My assets') : categoryName(c);
+const CATS: string[] = ['all', 'recent', ...CATEGORIES, 'lights', 'mine'];
+const RECENT_KEY = 'cartografo-recent-props';
+/** Recently picked props, newest first (per browser). */
+function recent(): string[] {
+  try { return (JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as string[]).filter((id) => STAMP_BY_ID.has(id) || id.startsWith('asset:')); } catch { return []; }
+}
+function remember(id: string) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...recent().filter((x) => x !== id)].slice(0, 24))); } catch { /* storage unavailable */ }
+}
+const CAT_ICON: Record<string, string> = {
+  all: '✦', recent: '🕘', furniture: '🪑', kitchen: '🍺', workshop: '⚒️', arcane: '🔮', temple: '🕯️', dungeon: '⛓️', caves: '💎', nature: '🌳', town: '🏘️',
+  camp: '⛺', nautical: '⚓', treasure: '💰', christmas: '🎄', fantasy: '🍄', decor: '🦴', lights: '💡', mine: '🖼️',
+};
+const catLabel = (c: string) => c === 'all' ? t('All') : c === 'recent' ? t('Recent') : c === 'lights' ? t('Lights') : c === 'mine' ? t('My assets') : categoryName(c);
+const catCount = (c: string) => c === 'all' ? STAMPS.length : c === 'recent' ? recent().length : c === 'lights' ? STAMPS.filter((s) => s.light).length : c === 'mine' ? assets.list('stamp').length : STAMPS.filter((s) => s.cat === c).length;
+/** Case- and accent-insensitive search over name, id, tags and category. */
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const haystack = new Map<string, string>();
+function matches(s: StampDef, q: string) {
+  let hs = haystack.get(s.id);
+  if (!hs) { hs = norm([s.name, s.id.replace(/_/g, ' '), s.tags ?? '', categoryName(s.cat)].join(' ')); haystack.set(s.id, hs); }
+  return norm(q).split(/\s+/).filter(Boolean).every((w) => hs!.includes(w));
+}
 
 export function renderDrawer(ed: Editor) {
   const d = ed.el.drawer;
@@ -23,11 +44,13 @@ export function renderDrawer(ed: Editor) {
     type: 'text', value: u.search, placeholder: t('Search: barrel, torch, tree…'), 'aria-label': t('Search props'),
     oninput: () => { u.search = search.value; fillGrid(); },
   });
+  const cats = h('div', { class: 'chips lib-cats', onwheel: (e: WheelEvent) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { cats.scrollLeft += e.deltaY; e.preventDefault(); } } },
+    ...CATS.filter((c) => c !== 'recent' || recent().length).map((c) => h('button', {
+      class: 'chip' + (c === u.stampCat && !u.search ? ' on' : ''), 'aria-pressed': String(c === u.stampCat && !u.search), 'aria-label': catLabel(c), title: catLabel(c),
+      onclick: () => { u.stampCat = c; u.search = ''; ed.refreshUI(); },
+    }, h('span', { class: 'chip-ico', 'aria-hidden': 'true' }, CAT_ICON[c] || '•'), catLabel(c), h('small', { class: 'chip-n' }, String(catCount(c))))));
   const head = h('div', { class: 'lib-head' },
     h('label', { class: 'search' }, icon('search', 16), search),
-    h('div', { class: 'chips' }, ...CATS.map((c) => h('button', {
-      class: 'chip' + (c === u.stampCat && !u.search ? ' on' : ''), onclick: () => { u.stampCat = c; u.search = ''; ed.refreshUI(); },
-    }, catLabel(c)))),
     h('div', { class: 'lib-opts' },
       ed.tool === 'light'
         ? [miniSlider(t('Radius'), ed.opts.light.radius, 1, 20, 0.5, (v) => { ed.opts.light.radius = v; }, (v) => t('{n} sq.', { n: v }))]
@@ -41,7 +64,10 @@ export function renderDrawer(ed: Editor) {
       iconBtn(u.drawerOpen ? 'chevron' : 'chevronUp', u.drawerOpen ? t('Collapse library') : t('Expand library'), () => { u.drawerOpen = !u.drawerOpen; ed.refreshUI(); })),
   );
   d.append(head);
-  if (u.drawerOpen) { fillGrid(); d.append(grid); }
+  if (u.drawerOpen) {
+    d.append(cats); fillGrid(); d.append(grid);
+    requestAnimationFrame(() => cats.querySelector<HTMLElement>('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+  }
   const sel = o.type.startsWith('asset:') ? assets.recs.get(o.type.slice(6)) : null;
   if (u.drawerOpen && sel && ed.tool === 'stamp') {
     const w = h('input', { type: 'number', value: sel.cells, min: 0.1, max: 50, step: 0.1, class: 'num-sm', onchange: () => { sel.cells = Math.max(0.1, +w.value || 1); assets.update(sel); ed.requestRender(); } });
@@ -59,14 +85,23 @@ function tile(label: string, img: string | HTMLElement, active: boolean, onClick
 
 function tiles(ed: Editor): HTMLElement[] {
   const o = ed.opts.stamp, u = ed.ui;
-  const pick = (type: string) => () => { o.type = type; ed.setTool('stamp'); };
-  const q = u.search.trim().toLowerCase();
+  const pick = (type: string) => () => { o.type = type; remember(type); ed.setTool('stamp'); };
+  const q = u.search.trim();
   const out: HTMLElement[] = [];
   const mine = () => assets.list('stamp').map((a) => tile(a.name, assets.urls.get(a.id) || '', ed.tool === 'stamp' && o.type === 'asset:' + a.id, pick('asset:' + a.id)));
   if (q) {
-    for (const s of STAMPS) if (s.name.toLowerCase().includes(q)) out.push(tile(s.name, sThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
+    for (const s of STAMPS) if (matches(s, q)) out.push(tile(s.name, lazyThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
     out.push(...mine().filter((t) => (t.title || '').toLowerCase().includes(q)));
     if (!out.length) out.push(h('p', { class: 'hint' }, t('No props found.')));
+    return out;
+  }
+  if (u.stampCat === 'recent') {
+    for (const id of recent()) {
+      if (id.startsWith('asset:')) { const a = assets.recs.get(id.slice(6)); if (a) out.push(tile(a.name, assets.urls.get(a.id) || '', ed.tool === 'stamp' && o.type === id, pick(id))); continue; }
+      const s = STAMP_BY_ID.get(id)!;
+      out.push(tile(s.name, lazyThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
+    }
+    if (!out.length) out.push(h('p', { class: 'hint' }, t('Props you pick will appear here.')));
     return out;
   }
   if (u.stampCat === 'mine') {
@@ -83,7 +118,7 @@ function tiles(ed: Editor): HTMLElement[] {
   }
   for (const s of STAMPS) {
     if (u.stampCat === 'lights' ? !s.light : u.stampCat !== 'all' && s.cat !== u.stampCat) continue;
-    out.push(tile(s.name, sThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
+    out.push(tile(s.name, lazyThumb(s.id), ed.tool === 'stamp' && o.type === s.id, pick(s.id)));
   }
   return out;
 }

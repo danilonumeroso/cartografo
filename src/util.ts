@@ -100,6 +100,10 @@ export function fillPattern(ctx: CanvasRenderingContext2D, img: CanvasImageSourc
 }
 
 export function hexToRgb(hex: string): [number, number, number] {
+  if (hex.startsWith('rgb')) {
+    const m = hex.match(/[\d.]+/g) || [];
+    return [+(m[0] ?? 0), +(m[1] ?? 0), +(m[2] ?? 0)];
+  }
   let h = hex.replace('#', '');
   if (h.length === 3) h = h.split('').map((c) => c + c).join('');
   const n = parseInt(h.slice(0, 6), 16);

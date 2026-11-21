@@ -3,7 +3,7 @@ import { alpha, button, clickMap, doc, drag, empty, home, menu, room } from './h
 
 test('Home lists templates, size presets and empty backgrounds', async ({ page }) => {
   await home(page);
-  await expect(page.locator('.tpl strong')).toHaveText(['Dungeon', 'Cave', 'Forest', 'Tavern', 'Empty']);
+  await expect(page.locator('.tpl strong')).toHaveText(['Dungeon', 'Cave', 'Forest', 'Tavern', 'Winter forest', 'Empty']);
   await expect(page.getByRole('group', { name: 'Size' }).locator('button')).toHaveText(['Small 20×15', 'Medium 30×22', 'Large 40×30']);
   await expect(page.getByText(/No maps yet/)).toBeVisible();
   await button(page, 'Large 40×30').click();
@@ -94,12 +94,16 @@ test('freeform, cave fill and wall tools change map geometry', async ({ page }) 
 test('furnish filters tiles and places the selected prop', async ({ page }) => {
   await empty(page);
   await button(page, 'Furnish').click();
-  await expect(page.locator('.drawer .chips button')).toHaveText(['All', 'Furniture', 'Dungeon', 'Caves', 'Outdoor', 'Decorations', 'Lights', 'My assets']);
+  const cats = await page.locator('.drawer .chips button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')));
+  expect(cats).toEqual(['All', 'Furniture', 'Kitchen & tavern', 'Workshop & forge', 'Magic & alchemy', 'Temple & graveyard', 'Dungeon', 'Caves', 'Nature',
+    'Town & farm', 'Camp & war', 'Docks & ships', 'Treasure', 'Christmas & winter', 'Fey & wonders', 'Clutter', 'Lights', 'My assets']);
   await button(page, 'Lights').click();
   await expect(button(page, 'Invisible light')).toBeVisible();
   await page.getByLabel('Search props').fill('bArReL');
   await expect(button(page, 'Barrel')).toBeVisible();
-  expect((await page.locator('.lib-tile').allTextContents()).every(s => /barrel/i.test(s))).toBe(true);
+  // Search also matches tags (a cask is a barrel), but never unrelated props.
+  await expect(button(page, 'Cask')).toBeVisible();
+  await expect(button(page, 'Table')).toHaveCount(0);
   await button(page, 'Barrel').click();
   await clickMap(page, 1050, 350);
   expect((await doc(page)).stamps).toMatchObject([{ type: 'barrel' }]);

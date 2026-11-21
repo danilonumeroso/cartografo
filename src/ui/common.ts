@@ -1,13 +1,22 @@
 import { closePopover, h, icon, popover } from '../dom';
 import { DoorKind, TokenKind, TokenSize, WallStyle } from '../model';
 import { stampThumb } from '../stamps';
-import { getTexture, TEX_BY_ID, TEXTURES } from '../textures';
+import { getTexture, TEX_BY_ID, texGroup, TEXTURES, type TexGroup } from '../textures';
 import { ctx2d, makeCanvas } from '../util';
 import { t } from '../i18n';
 
-export const WALL_NAMES: [WallStyle, string][] = [['stone', t('Stone')], ['brick', t('Brick')], ['wood', t('Wood')], ['cave', t('Rough rock')]];
-export const WALL_SWATCH: Record<WallStyle, string> = { stone: '#7d786f', brick: '#8a4b36', wood: '#5b3e26', cave: '#655a50' };
-export const DOOR_NAMES: [DoorKind, string][] = [['wood', t('Wood')], ['double', t('Double')], ['iron', t('Portcullis')], ['secret', t('Secret')], ['arch', t('Archway')]];
+export const WALL_NAMES: [WallStyle, string][] = [
+  ['stone', t('Stone')], ['brick', t('Brick')], ['wood', t('Wood')], ['cave', t('Rough rock')], ['dark', t('Dark stone')], ['marble', t('Marble')],
+  ['sandstone', t('Sandstone')], ['palisade', t('Log palisade')], ['hedge', t('Hedge')], ['ice', t('Ice')], ['obsidian', t('Obsidian')], ['bone', t('Bone')], ['crystal', t('Crystal')],
+];
+export const WALL_SWATCH: Record<WallStyle, string> = {
+  stone: '#7d786f', brick: '#8a4b36', wood: '#5b3e26', cave: '#655a50', dark: '#3e3c42', marble: '#e4dfd4', sandstone: '#c8a26a',
+  palisade: '#6a4a2c', hedge: '#2e5a22', ice: '#a8d4ea', obsidian: '#221c2c', bone: '#cfc2a0', crystal: '#7aa8e0',
+};
+export const DOOR_NAMES: [DoorKind, string][] = [
+  ['wood', t('Wood')], ['double', t('Double')], ['iron', t('Portcullis')], ['secret', t('Secret')], ['arch', t('Archway')],
+  ['stone', t('Stone slab')], ['bars', t('Cell door')], ['curtain', t('Curtain')],
+];
 export const FLOORS = TEXTURES.filter((t) => t.floor).map((t) => t.id);
 export const TOKEN_PRESETS: { name: string; kind: TokenKind; size: TokenSize }[] = [
   { name: t('Hero'), kind: 'pc', size: 'medium' }, { name: 'Goblin', kind: 'monster', size: 'small' }, { name: t('Kobold'), kind: 'monster', size: 'small' },
@@ -29,6 +38,37 @@ export function texSwatch(id: string) {
 }
 const thumbCache = new Map<string, string>();
 export function sThumb(id: string) { let u = thumbCache.get(id); if (!u) { u = stampThumb(id, 96); thumbCache.set(id, u); } return u; }
+
+/** Thumbnail <img> rendered only when it scrolls into view (the library has hundreds of props). */
+const pendingThumbs: HTMLImageElement[] = [];
+let thumbTimer = 0;
+function pumpThumbs() {
+  thumbTimer = 0;
+  const t0 = performance.now();
+  while (pendingThumbs.length && performance.now() - t0 < 12) {
+    const img = pendingThumbs.shift()!;
+    if (img.isConnected) img.src = sThumb(img.dataset.stamp!);
+  }
+  if (pendingThumbs.length) thumbTimer = window.setTimeout(pumpThumbs, 0);
+}
+let thumbObserver: IntersectionObserver | null = null;
+export function lazyThumb(id: string): HTMLImageElement {
+  const img = h('img', { alt: '', 'data-stamp': id, class: 'lazy' }) as HTMLImageElement;
+  const cached = thumbCache.get(id);
+  if (cached) { img.src = cached; img.classList.remove('lazy'); return img; }
+  if (typeof IntersectionObserver === 'undefined') { img.src = sThumb(id); return img; }
+  thumbObserver ??= new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const el = e.target as HTMLImageElement;
+      thumbObserver!.unobserve(el); el.classList.remove('lazy');
+      pendingThumbs.push(el);
+    }
+    if (pendingThumbs.length && !thumbTimer) thumbTimer = window.setTimeout(pumpThumbs, 0);
+  }, { rootMargin: '120px' });
+  thumbObserver.observe(img);
+  return img;
+}
 export const texName = (id: string) => TEX_BY_ID.get(id)?.name || id;
 
 /** Large labelled tool button used in docks. */
@@ -51,11 +91,17 @@ export function toggle(label: string, value: boolean, onChange: (v: boolean) => 
 /** Button showing a swatch + caption that opens a grid of texture swatches. */
 export function texPicker(caption: string, ids: string[], value: string, onPick: (id: string) => void) {
   const b: HTMLButtonElement = h('button', { class: 'picker', onclick: () => {
-    const grid = h('div', { class: 'swatches' }, ...ids.map((id) => h('button', {
+    const sw = (id: string) => h('button', {
       class: 'swatch' + (id === value ? ' on' : ''), title: texName(id),
       onclick: () => { closePopover(); onPick(id); },
-    }, h('img', { src: texSwatch(id), alt: '' }), h('span', null, texName(id)))));
-    popover(b, h('div', { class: 'pop-body' }, h('div', { class: 'pop-title' }, caption), grid));
+    }, h('img', { src: texSwatch(id), alt: '' }), h('span', null, texName(id)));
+    const groups: [TexGroup, string][] = [['ground', t('Natural ground')], ['built', t('Built floors')], ['exotic', t('Exotic floors')], ['cover', t('Liquids and cover')]];
+    const sections = groups.map(([g, label]) => [label, ids.filter((id) => texGroup(id) === g)] as const).filter(([, l]) => l.length);
+    const body = sections.length > 1
+      ? sections.flatMap(([label, list]) => [h('div', { class: 'pop-sub' }, label), h('div', { class: 'swatches' }, ...list.map(sw))])
+      : [h('div', { class: 'swatches' }, ...ids.map(sw))];
+    popover(b, h('div', { class: 'pop-body tex-pop' }, h('div', { class: 'pop-title' }, caption), ...body));
+    requestAnimationFrame(() => document.querySelector('.tex-pop .swatch.on')?.scrollIntoView({ block: 'nearest' }));
   } },
   h('img', { class: 'picker-swatch', src: texSwatch(value), alt: '' }),
   h('span', { class: 'picker-text' }, h('small', null, caption), h('span', null, texName(value))),

@@ -201,7 +201,7 @@ export class Editor {
     const doc = newDoc(o.name, size(o.cols), size(o.rows), bg);
     const rt = new MapRuntime(doc);
     if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);
-    else if (['dungeon', 'cave', 'forest', 'tavern'].includes(o.template)) generate(rt, o.template as GenKind);
+    else if (['dungeon', 'cave', 'forest', 'tavern', 'winter'].includes(o.template)) generate(rt, o.template as GenKind);
     this.showBusy(t('Painting the map…'));
     await nextFrame();
     rt.engine.flush();
@@ -1143,7 +1143,8 @@ export class Editor {
   private loop = (t: number) => {
     requestAnimationFrame(this.loop);
     if (!this.rt) return;
-    const animated = this.pings.length > 0 || (this.rt.doc.combat.active && !!this.rt.doc.combat.turn) || (this.mode === 'session' && allLights(this.rt, false).some((l) => l.flicker) && this.rt.doc.ambient > 0);
+    const animated = this.pings.length > 0 || (this.rt.doc.combat.active && !!this.rt.doc.combat.turn) || (this.mode === 'session' && allLights(this.rt, false).some((l) => l.flicker) && this.rt.doc.ambient > 0)
+      || (this.mode === 'session' && !!this.rt.doc.weather && this.rt.doc.weather !== 'none');
     if (animated && t - this.lastAnim > 33) { this.needRender = true; this.lastAnim = t; }
     const flushed = this.rt.engine.flush();
     if (flushed) this.needRender = true;

@@ -10,6 +10,7 @@ const TEMPLATES = [
   { id: 'cave', name: t('Cave'), desc: t('Tunnels, pools, crystals'), img: 'templates/cave.jpg' },
   { id: 'forest', name: t('Forest'), desc: t('Clearing, trail, camp'), img: 'templates/forest.jpg' },
   { id: 'tavern', name: t('Tavern'), desc: t('Hall, kitchen, street'), img: 'templates/tavern.jpg' },
+  { id: 'winter', name: t('Winter forest'), desc: t('Snowy pines, frozen stream, festive camp'), img: 'templates/winter.jpg' },
 ];
 const SIZES: [string, number, number][] = [[t('Small'), 20, 15], [t('Medium'), 30, 22], [t('Large'), 40, 30]];
 let size = 1;

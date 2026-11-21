@@ -25,7 +25,7 @@ under test through the UI wherever practical (clicks, drags, keyboard).
 - A **map** is a grid of squares (default 5 ft per square), between 10 and 80 squares per side (smaller sizes are clamped to 10).
 - Content: terrain paint, **rooms** (polygons that get walls automatically), **caves** (painted
   areas with natural rock walls), free **walls**, **doors** (wood, double, portcullis, secret,
-  archway; open or closed), **props** (top-down objects, some emit light), **lights**, **labels**,
+  archway, stone slab, cell door, curtain; open or closed), **props** (top-down objects, some emit light), **lights**, **labels**,
   **markers** (pins with private DM notes, optional text for players, optional link to another map),
   **tokens** (creatures with size, kind, HP, AC, initiative modifier, conditions, hidden flag).
 - Token kinds: player character, ally, NPC, monster. Sizes: tiny, small, medium, large (2×2),
@@ -37,12 +37,12 @@ under test through the UI wherever practical (clicks, drags, keyboard).
 
 ### 1. First run and Home screen
 1. With empty storage, the app opens on the **Home** screen: a "New map" section with templates
-   (Dungeon, Cave, Forest, Tavern, Empty) and size presets (Small 20×15, Medium 30×22, Large 40×30),
+   (Dungeon, Cave, Forest, Tavern, Winter forest, Empty) and size presets (Small 20×15, Medium 30×22, Large 40×30),
    plus a "Your maps" section that says there are no maps yet.
 2. Choosing a template creates a map of the selected size, closes Home and opens the editor with a
    non-blank map rendered on the canvas. The new map appears in "Your maps" afterwards.
    The Dungeon template first opens the dungeon generator (section 8); "Create map" then creates it.
-3. The four generator templates produce populated maps (rooms/caves/props as appropriate). "Empty"
+3. The five generator templates produce populated maps (rooms/caves/props as appropriate). "Empty"
    offers dark rock, grass or wood backgrounds.
 4. "Your maps" can search by name, duplicate a map (the copy gets a "(copy)" suffix) and delete a
    map other than the one currently open. Clicking a card opens that map.
@@ -58,9 +58,13 @@ under test through the UI wherever practical (clicks, drags, keyboard).
 5. **Build → Wall / Door**: clicking adds wall points (Enter/double-click finishes); clicking near a
    grid edge places a door aligned to that edge; clicking an existing door toggles open/closed.
 6. **Paint**: dragging paints the selected terrain texture; "Erase" removes that texture.
-7. **Furnish**: a prop library with search (matches prop names in the active language) and
-   categories (All, Furniture, Dungeon, Caves, Outdoor, Decorations, Lights, My assets). Clicking a
-   tile then the map places that prop. "Lights" includes an "Invisible light" tool.
+7. **Furnish**: a prop library with search (matches prop names in the active language, ids, English
+   synonyms and category names, ignoring case and accents) and a single scrollable row of categories
+   (All, Recent — only once a prop was picked —, Furniture, Kitchen & tavern, Workshop & forge,
+   Magic & alchemy, Temple & graveyard, Dungeon, Caves, Nature, Town & farm, Camp & war, Docks & ships,
+   Treasure, Christmas & winter, Fey & wonders, Clutter, Lights, My assets), each with its count.
+   Clicking a tile then the map places that prop. "Lights" includes an "Invisible light" tool.
+   Every prop id from earlier versions keeps working in saved maps.
 8. **Annotate**: Text, Marker, Token, Ruler. New tokens of kind *monster* start hidden from players
    when placed in Play mode. Placing a token does not select it, so several tokens can be placed in a row.
 9. **Selection**: clicking an object selects it and shows a contextual card/toolbar next to it.
@@ -74,8 +78,9 @@ under test through the UI wherever practical (clicks, drags, keyboard).
 11. **Autosave**: changes are saved automatically (status shows "Saving…" then "Saved");
     reloading the page restores the same map with the same content, including terrain paint and fog.
 12. **Map settings** (⋯ menu): rename, resize (content keeps its position relative to the top-left
-    corner), base terrain, room wall style, grid options, ambient darkness, fog on/off, regenerate,
-    delete map. **Deleting the open map must not resurrect it** through a pending autosave.
+    corner), base terrain, room wall style, grid options, ambient darkness, fog on/off, **weather**
+    (clear, snowfall, rain, falling ash, rising embers, falling leaves: animated particles also shown on
+    the TV, always below the fog), regenerate, delete map. **Deleting the open map must not resurrect it** through a pending autosave.
 
 ### 3. Play mode (session)
 1. Switching to Play shows an initiative panel on the left and a play bar at the bottom
@@ -132,6 +137,7 @@ under test through the UI wherever practical (clicks, drags, keyboard).
 2. Dungeon: several rooms that are all reachable from each other (rooms and corridors form one
    connected area), doors placed on room boundaries, numbered room labels hidden from players, fog
    enabled. Cave: one connected cave area. Tavern: a building with interior walls and doors.
+   Winter forest: snowy ground, trees and a central clearing, with snowfall turned on.
 3. Regenerating replaces the previous content, tokens included (no leftover objects from the previous
    generation). Regenerating is not allowed while combat is active: the DM is asked to end combat first.
 

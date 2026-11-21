@@ -436,8 +436,9 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
       b.label(String(i + 1), lx + 0.05, ly, 44);
     }
     if (o.cave) {
-      times(wall.length * 0.2 * m + 1, () => onWall(pick(r, ['stalagmite', 'rocks', 'boulder']), 0.1, rrange(r, 0.7, 1.1)));
-      if (r() < 0.6) times(rint(r, 1, 2), () => onWall(pick(r, ['crystals', 'glowshrooms', 'mushrooms']), 0.1));
+      times(wall.length * 0.2 * m + 1, () => onWall(pick(r, ['stalagmite', 'rocks', 'boulder', 'stalagmites']), 0.1, rrange(r, 0.7, 1.1)));
+      if (r() < 0.6) times(rint(r, 1, 2), () => onWall(pick(r, ['crystals', 'glowshrooms', 'mushrooms', 'crystals_blue', 'geode']), 0.1, 0.8));
+      if (r() < 0.4) inCenter(pick(r, ['cave_moss', 'glowmoss', 'ore_vein']));
       if (r() < 0.4) { const c = takeCenter(); if (c !== null) { const [x, y] = cxy(c); b.paint('water', x, y, rrange(r, 0.7, 1.3), 0.2); } }
       if (r() < 0.3) inCenter('bones');
       return;
@@ -451,46 +452,51 @@ export function generateDungeon(rt: MapRuntime, params: DungeonParams, seed: str
       const theme = pick(r, themes);
       switch (theme) {
         case 'crypt':
-          times(Math.max(1, center.length / 6) * m, () => inCenter('sarcophagus', pick(r, [0, Math.PI / 2])));
-          onWall('candles', 0.2);
-          if (r() < 0.6) inCenter('bones');
+          times(Math.max(1, center.length / 6) * m, () => inCenter(pick(r, ['sarcophagus', 'sarcophagus', 'coffin', 'tomb_slab']), pick(r, [0, Math.PI / 2])));
+          onWall(pick(r, ['candles', 'prayer_candles']), 0.2, 0.8);
+          if (r() < 0.5) onWall('urns', 0.15, 0.8);
+          if (r() < 0.6) inCenter(pick(r, ['bones', 'skulls', 'coffin_open']));
           break;
         case 'ritual': {
           const c = center.length ? center[Math.floor(center.length / 2)] : null;
-          if (c !== null && center.length >= 4) { used.add(c); const [x, y] = cxy(c); b.stamp('pentagram', x, y, 0, Math.min(1, Math.sqrt(center.length) / 4)); }
-          onWall('altar', 0.2, 0.8);
-          times(2 * m, () => inCenter('candles', 0));
-          if (r() < 0.6) inCenter('blood');
+          if (c !== null && center.length >= 4) { used.add(c); const [x, y] = cxy(c); b.stamp(r() < 0.5 ? 'pentagram' : 'summoning_circle', x, y, 0, Math.min(1, Math.sqrt(center.length) / 4) * 0.75); }
+          onWall(r() < 0.5 ? 'altar' : 'sacrificial_altar', 0.2, 0.8);
+          times(2 * m, () => inCenter(pick(r, ['candles', 'candle_stubs']), 0));
+          if (r() < 0.6) inCenter(pick(r, ['blood', 'blood_trail', 'skulls']));
+          if (r() < 0.4) onWall('green_brazier', 0.1, 0.8);
           break;
         }
         case 'prison':
-          times(Math.max(1, wall.length * 0.3 * m), () => onWall('cage', 0.05));
-          times(1 + m, () => inCenter('bones'));
+          times(Math.max(1, wall.length * 0.3 * m), () => onWall(pick(r, ['cage', 'cage', 'shackles', 'chained_skeleton']), 0.05));
+          times(1 + m, () => inCenter(pick(r, ['bones', 'bed_straw', 'bucket', 'rats'])));
+          if (r() < 0.4) onWall(pick(r, ['iron_maiden', 'torture_rack', 'stocks']), 0.1, 0.9);
           onWall('chest', 0.2);
           break;
         case 'storage':
-          times(Math.max(2, wall.length * 0.45 * m), () => onWall(pick(r, ['barrel', 'crate', 'crate', 'sacks', 'barrels']), 0.15, rrange(r, 0.85, 1.05)));
+          times(Math.max(2, wall.length * 0.45 * m), () => onWall(pick(r, ['barrel', 'crate', 'crate', 'sacks', 'barrels', 'crate_stack', 'cask', 'grain_sack', 'weapon_barrel']), 0.15, rrange(r, 0.8, 1)));
           break;
         case 'throne':
           onWall('throne', 0.15);
           if (center.length >= 6) inCenter('rug', Math.PI / 2, 0.8);
           times(2 * m, () => inCenter('pillar', 0));
           times(2, () => onWall('brazier', 0.1, 0.9));
+          if (r() < 0.5) onWall('statue_knight', 0.1, 0.9);
           break;
         case 'library':
-          times(Math.max(1, wall.length * 0.18 * m), () => onWall('bookshelf', 0.32));
-          inCenter('table', pick(r, [0, Math.PI / 2]), 0.9);
-          inCenter('candles', 0, 0.8);
+          times(Math.max(1, wall.length * 0.18 * m), () => onWall(r() < 0.25 ? 'arcane_bookcase' : 'bookshelf', 0.32));
+          inCenter(r() < 0.5 ? 'desk' : 'table', pick(r, [0, Math.PI / 2]), 0.9);
+          inCenter(pick(r, ['candles', 'book_piles', 'scroll_pile', 'spellbook_lectern']), 0, 0.8);
           break;
         case 'barracks':
-          times(Math.max(1, wall.length * 0.25 * m), () => onWall('bed', 0.0));
-          times(1 + m, () => onWall('chest', 0.2));
+          times(Math.max(1, wall.length * 0.25 * m), () => onWall(r() < 0.4 ? 'bunk_bed' : 'bed', 0.0));
+          times(1 + m, () => onWall(pick(r, ['chest', 'chest', 'weapon_rack', 'armor_stand']), 0.2));
           inCenter('table', 0, 0.9);
           break;
       }
     }
     if (params.ambient > 0.05) times(o.w * o.h > 20 ? 2 : 1, () => onWall('torch', 0.38, 1));
     if (r() < 0.6) onWall('cobweb', 0.2);
+    if (r() < 0.25) inCenter(pick(r, ['floor_crack', 'papers', 'pottery_shards', 'scorch', 'skulls']));
     if (params.style === 'ruins') {
       times(rint(r, 1, 3), () => { const c = takeCenter() ?? takeWall()?.c; if (c == null) return; const [x, y] = cxy(c); b.paint(pick(r, ['moss', 'dirt', 'gravel']), x, y, rrange(r, 0.8, 1.6), 0.1, 0.7); });
       times(rint(r, 1, 3), () => inCenter('rubble'));

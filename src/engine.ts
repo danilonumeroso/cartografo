@@ -1,6 +1,6 @@
 import { CELL, MapDoc, MASK_SCALE, WallStyle } from './model';
 import { EDGE_N, getEdgeNoise } from './noise';
-import { ABOVE, BELOW, getTexture, getTextureData, TS } from './textures';
+import { ABOVE, BELOW, getTexture, getTextureData, TEX_BY_ID, TS } from './textures';
 import { clamp, clipRect, ctx2d, expandRect, fillPattern, fit, makeCanvas, ptsBBox, Rect, rectsIntersect, smoothstep, unionRect } from './util';
 
 export const MARGIN = 48;
@@ -8,7 +8,10 @@ const BLUR = 26;          // canvas shadowBlur (sigma ≈ 13 px)
 const WALL_T = 0.13;      // blur threshold where walls end (≈ 16 px thick)
 const TILE = 1024;
 
-export const WALL_TEX: Record<WallStyle, string> = { stone: 'wall_stone', brick: 'wall_brick', wood: 'wall_wood', cave: 'wall_cave' };
+export const WALL_TEX: Record<WallStyle, string> = {
+  stone: 'wall_stone', brick: 'wall_brick', wood: 'wall_wood', cave: 'wall_cave', dark: 'wall_dark', marble: 'wall_marble', sandstone: 'wall_sandstone',
+  palisade: 'wall_palisade', hedge: 'wall_hedge', ice: 'wall_ice', obsidian: 'wall_obsidian', bone: 'wall_bone', crystal: 'wall_crystal',
+};
 
 export class Engine {
   doc: MapDoc;
@@ -151,14 +154,13 @@ export class Engine {
     const fc = fit(this.cFx, R.w, R.h);
     const img = fc.createImageData(R.w, R.h);
     const o = img.data;
-    const lava = id === 'lava';
-    const col = lava ? [255, 190, 80] : [225, 245, 255];
+    const foam = TEX_BY_ID.get(id)?.foam ?? [225, 245, 255, 150];
     for (let i = 3; i < d.length; i += 4) {
       const a = d[i] / 255;
       if (a <= 0 || a >= 1) continue;
       const e = 4 * a * (1 - a);
-      o[i - 3] = col[0]; o[i - 2] = col[1]; o[i - 1] = col[2];
-      o[i] = Math.pow(e, 1.6) * (lava ? 230 : 150);
+      o[i - 3] = foam[0]; o[i - 2] = foam[1]; o[i - 1] = foam[2];
+      o[i] = Math.pow(e, 1.6) * foam[3];
     }
     fc.putImageData(img, 0, 0);
     rc.drawImage(this.cFx, 0, 0);
@@ -226,7 +228,7 @@ export class Engine {
     const fc = fit(this.cFx, R.w, R.h);
     const img = fc.createImageData(R.w, R.h);
     const o = img.data;
-    const wd = getTextureData(WALL_TEX[this.doc.wallStyle]);
+    const wd = getTextureData(WALL_TEX[this.doc.wallStyle] ?? 'wall_stone');
     const cwd = getTextureData('wall_cave');
     const T = WALL_T;
     for (let y = 0; y < R.h; y++) {

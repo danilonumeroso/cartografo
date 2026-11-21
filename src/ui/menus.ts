@@ -2,7 +2,7 @@ import { assets } from '../assets';
 import { check, h, icon, modal, pickFile, toast } from '../dom';
 import type { Editor } from '../editor';
 import { GEN_NAMES, GenKind } from '../generate';
-import { migrateDoc, MIN_SIZE, WallStyle } from '../model';
+import { migrateDoc, MIN_SIZE, WallStyle, Weather } from '../model';
 import { deleteMap, getMap, listAssets, listMaps, putAsset, putMap, StoredMap } from '../storage';
 import { blobToDataURL, dataURLToBlob, downloadBlob, uid } from '../util';
 import { showGenerator } from './generator';
@@ -69,6 +69,8 @@ export function mapSettings(ed: Editor) {
     miniSlider(t('Ambient darkness'), doc.ambient, 0, 0.95, 0.05, (v) => { doc.ambient = v; ed.changed('objects'); }, (v) => Math.round(v * 100) + '%'),
     toggle(t('Full lighting preview while preparing'), ed.opts.previewLights, (v) => { ed.opts.previewLights = v; ed.requestRender(); }),
     toggle(t('Fog of war enabled'), doc.fogEnabled, (v) => { ed.mutate(t('Fog'), () => { doc.fogEnabled = v; }); }),
+    listPicker<Weather>(t('Weather'), [['none', t('Clear')], ['snow', t('Snowfall')], ['rain', t('Rain')], ['ash', t('Falling ash')], ['embers', t('Rising embers')], ['leaves', t('Falling leaves')]],
+      doc.weather || 'none', (v) => { doc.weather = v; ed.changed('settings'); close(); mapSettings(ed); }),
     h('h3', null, t('Regenerate')),
     h('div', { class: 'row' },
       h('select', { onchange: (e: Event) => { gen = (e.target as HTMLSelectElement).value as GenKind; } }, ...Object.entries(GEN_NAMES).map(([k, v]) => h('option', { value: k }, v))),
