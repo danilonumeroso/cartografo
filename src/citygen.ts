@@ -3,8 +3,8 @@ import type { MapRuntime } from './runtime';
 import { B, reset, tavernName } from './genkit';
 import { seedNumber } from './dungeon';
 import { fantasyName } from './worldgen';
-import { clamp, mulberry32, pick, pointInPoly, Rng, rrange, uid } from './util';
-import { lang, t } from './i18n';
+import { clamp, mulberry32, pick, pointInPoly, rint, Rng, rrange, uid } from './util';
+import { t } from './i18n';
 
 export type CityWater = 'none' | 'river' | 'coast';
 export interface CityParams {
@@ -41,18 +41,31 @@ export function generateCity(rt: MapRuntime, params: CityParams, seed: string): 
   if (params.water === 'coast') { cx -= towardSea[0] * C * 0.12; cy -= towardSea[1] * R * 0.12; }
   const cityR = Math.min(C, R) * 0.5 * [0.5, 0.62, 0.74, 0.85, 0.94][clamp(Math.round(params.size), 0, 4)];
   const plazaR = clamp(cityR * 0.16, 2.2, 4.5);
-  const nMain = 5 + Math.floor(r() * 3) + (params.size >= 3 ? 1 : 0);
-  const radials = Array.from({ length: nMain }, (_, i) => ({ base: (i / nMain) * Math.PI * 2 + rrange(r, -0.25, 0.25), amp: rrange(r, 0.04, 0.12), ph: r() * 6.28 }));
+  // ---- town plan: round, oval, rounded-square or square and orthogonal (a planned, castrum-like town),
+  // at a tilt. Rings and radials live in this plan's own geometry, so streets, blocks and walls follow it.
+  const plan = pick(r, ['round', 'round', 'oval', 'squarish', 'square'] as const);
+  const pN = plan === 'square' ? 9 : plan === 'squarish' ? 3.4 : 2;
+  const tilt = plan === 'square' || plan === 'squarish' ? rrange(r, -0.4, 0.4) : 0, cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+  const grid = plan === 'square';
+  const nMain = grid ? (params.size >= 2 && r() < 0.5 ? 8 : 4) : rint(r, 4, 7) + (params.size >= 3 ? 1 : 0);
+  const radials = Array.from({ length: nMain }, (_, i) => grid
+    ? { base: (i / nMain) * Math.PI * 2, amp: 0.005, ph: 0 }
+    : { base: (i / nMain) * Math.PI * 2 + rrange(r, -0.25, 0.25), amp: rrange(r, 0.04, 0.14), ph: r() * 6.28 });
   radials.sort((a, b2) => a.base - b2.base);
   const angleAt = (i: number, rad: number) => { const q = radials[(i + nMain) % nMain]; return q.base + q.amp * Math.sin(rad * 0.18 + q.ph) + (i >= nMain ? Math.PI * 2 : 0); };
   const ringStep = rrange(r, 3.6, 4.6) - params.density * 0.2;
   const rings: number[] = [plazaR];
   while (rings[rings.length - 1] + ringStep < cityR) rings.push(rings[rings.length - 1] + ringStep * rrange(r, 0.85, 1.15));
-  const ringWob = rings.map(() => ({ a: rrange(r, 0.03, 0.07), k: 2 + Math.floor(r() * 3), ph: r() * 6.28 }));
+  const ringWob = rings.map(() => ({ a: grid ? rrange(r, 0.004, 0.012) : rrange(r, 0.02, 0.1), k: 2 + Math.floor(r() * 3), ph: r() * 6.28 }));
   const ringR = (k: number, th: number) => rings[k] * (1 + ringWob[k].a * Math.sin(th * ringWob[k].k + ringWob[k].ph));
-  const ax = clamp((C / R) * rrange(r, 0.75, 0.9), 1, 1.18), ay = 1;
-  const polar = (rad: number, th: number): P => [cx + Math.cos(th) * rad * ax, cy + Math.sin(th) * rad * ay];
-  const radOf = (x: number, y: number) => Math.hypot((x - cx) / ax, (y - cy) / ay);
+  const ax = plan === 'oval' ? clamp((C / R) * rrange(r, 1, 1.25), 1.15, 1.45) : clamp((C / R) * rrange(r, 0.75, 0.9), 1, 1.18), ay = 1;
+  /** Length of a direction in the plan's L^p norm: 1 for a round town, larger towards a square's corners. */
+  const lp = (u: number, v: number) => (pN === 2 ? Math.hypot(u, v) : (Math.abs(u) ** pN + Math.abs(v) ** pN) ** (1 / pN));
+  const polar = (rad: number, th: number): P => {
+    const c = Math.cos(th), sn = Math.sin(th), n = lp(c, sn), lx = (c / n) * rad * ax, ly = (sn / n) * rad * ay;
+    return [cx + lx * cosT - ly * sinT, cy + lx * sinT + ly * cosT];
+  };
+  const radOf = (x: number, y: number) => { const dx = x - cx, dy = y - cy; return lp((dx * cosT + dy * sinT) / ax, (-dx * sinT + dy * cosT) / ay); };
   const inMap = ([x, y]: P, m = 0.6) => x > m && y > m && x < C - m && y < R - m;
 
   // ---- water
