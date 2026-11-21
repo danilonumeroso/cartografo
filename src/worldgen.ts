@@ -3,7 +3,7 @@ import type { MapRuntime } from './runtime';
 import { B, Box, declutter, nearby, reset } from './genkit';
 import { fbmTile, sampleWrap } from './noise';
 import { seedNumber } from './dungeon';
-import { clamp, ctx2d, makeCanvas, mulberry32, pick, Rng, rrange, smoothstep, uid } from './util';
+import { clamp, ctx2d, makeCanvas, mulberry32, pick, rint, Rng, rrange, smoothstep, uid } from './util';
 import { t } from './i18n';
 
 export type WorldShape = 'continent' | 'archipelago' | 'twin' | 'coast';
@@ -58,19 +58,82 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
   const N1 = fbmTile(256, params.shape === 'archipelago' ? 7 : 3, 6, seedN & 0xffff, 0.52), N2 = fbmTile(256, 8, 4, (seedN >>> 8) & 0xffff);
   const NM = fbmTile(256, 4, 5, (seedN >>> 4) & 0xffff), NT = fbmTile(256, 3, 4, (seedN >>> 12) & 0xffff);
   const ox = r() * 256, oy = r() * 256, k = 256 / Math.max(gw, gh) * 0.98;
-  const centres: [number, number][] = params.shape === 'twin' ? [[0.3, 0.45], [0.72, 0.58]] : params.shape === 'coast' ? [[0.15, 0.5]] : [[0.5, 0.5]];
+  // ---- land layout: a few overlapping blobs (or a shoreline) on noise-warped coordinates, so every seed
+  // gets its own outline (peninsulas, bays, necks of land) instead of one round island in the middle
+  const NW = fbmTile(256, 2, 3, (seedN >>> 16) & 0xffff);
+  type Blob = { x: number; y: number; rx: number; ry: number; a: number };
+  const blobs: Blob[] = [];
+  const blob = (x: number, y: number, rad: number): Blob => ({ x, y, rx: rad * rrange(r, 0.85, 1.35), ry: rad * rrange(r, 0.7, 1.15), a: r() * Math.PI });
+  /** A main mass with up to `n` smaller lobes around it. */
+  const cluster = (cx: number, cy: number, rad: number, n: number) => {
+    blobs.push(blob(cx, cy, rad));
+    for (let i = 0; i < n; i++) {
+      const a = r() * Math.PI * 2, d = rad * rrange(r, 0.7, 1.15);
+      blobs.push(blob(clamp(cx + Math.cos(a) * d * 0.85, 0.12, 0.88), clamp(cy + Math.sin(a) * d, 0.15, 0.85), rad * rrange(r, 0.35, 0.7)));
+    }
+  };
+  const coastSide = rint(r, 0, 3); // coastline: land along the left, right, top or bottom edge
+  let twinAxis = 0; // two lands: direction from one to the other, a strait runs across it
+  if (params.shape === 'continent') cluster(rrange(r, 0.36, 0.64), rrange(r, 0.38, 0.62), rrange(r, 0.22, 0.3), rint(r, 1, 4));
+  else if (params.shape === 'twin') {
+    const a = rrange(r, -0.6, 0.6) + (r() < 0.3 ? Math.PI / 2 : 0), d = rrange(r, 0.2, 0.25);
+    twinAxis = a;
+    cluster(0.5 + Math.cos(a) * d, 0.5 + Math.sin(a) * d * 0.9, rrange(r, 0.15, 0.2), rint(r, 0, 2));
+    cluster(0.5 - Math.cos(a) * d, 0.5 - Math.sin(a) * d * 0.9, rrange(r, 0.13, 0.19), rint(r, 0, 2));
+  } else if (params.shape === 'archipelago') {
+    for (let i = rint(r, 3, 5); i > 0; i--) blobs.push(blob(rrange(r, 0.18, 0.82), rrange(r, 0.2, 0.8), rrange(r, 0.08, 0.16)));
+  }
+  const blobShape = (u: number, v: number) => {
+    let best = -Infinity;
+    for (const o of blobs) {
+      const dx = u - o.x, dy = v - o.y, ca = Math.cos(o.a), sa = Math.sin(o.a);
+      best = Math.max(best, 1 - Math.hypot((dx * ca + dy * sa) / o.rx, (-dx * sa + dy * ca) / o.ry));
+    }
+    return best;
+  };
+  // mountain ranges follow a few random ridge lines across the land, not the centre of the map
+  const ridges: [number, number, number, number][] = [];
+  for (let n = params.shape === 'archipelago' ? rint(r, 0, 1) : rint(r, 1, 3); n > 0; n--) {
+    const o = blobs.length ? pick(r, blobs) : { x: rrange(r, 0.3, 0.7), y: rrange(r, 0.3, 0.7), rx: 0.2, ry: 0.2 };
+    let x = o.x + rrange(r, -0.5, 0.5) * o.rx, y = o.y + rrange(r, -0.5, 0.5) * o.ry, a = r() * Math.PI * 2;
+    for (let seg = rint(r, 2, 4); seg > 0; seg--) {
+      const len = rrange(r, 0.08, 0.16), nx = x + Math.cos(a) * len, ny = y + Math.sin(a) * len;
+      ridges.push([x, y, nx, ny]);
+      x = nx; y = ny; a += rrange(r, -0.7, 0.7);
+    }
+  }
+  const ridgeAt = (u: number, v: number) => {
+    let best = 0;
+    for (const [x1, y1, x2, y2] of ridges) {
+      const dx = x2 - x1, dy = y2 - y1, t2 = clamp(((u - x1) * dx + (v - y1) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+      const d = Math.hypot(u - x1 - dx * t2, v - y1 - dy * t2);
+      best = Math.max(best, Math.exp(-((d / 0.05) ** 2)));
+    }
+    return best;
+  };
   const h = new Float32Array(gw * gh);
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
-    const u = x / gw, v = y / gh;
-    let n = sampleWrap(N1, 256, ox + x * k, oy + y * k) * 0.8 + sampleWrap(N2, 256, ox + x * k * 2, oy + y * k * 2) * 0.2;
+    const u0 = x / gw, v0 = y / gh;
+    const u = u0 + (sampleWrap(NW, 256, ox + x * k, oy + y * k) - 0.5) * 0.24, v = v0 + (sampleWrap(NW, 256, ox + 97 + x * k, oy + 41 + y * k) - 0.5) * 0.24;
+    const fine = sampleWrap(N2, 256, ox + x * k * 2, oy + y * k * 2);
+    let n = sampleWrap(N1, 256, ox + x * k, oy + y * k) * 0.8 + fine * 0.2;
     let shape: number;
-    if (params.shape === 'archipelago') shape = 0.35;
-    else if (params.shape === 'coast') shape = 1 - clamp((u - 0.05) * 1.3, 0, 1);
-    else shape = Math.max(...centres.map(([cx, cy]) => 1 - Math.hypot((u - cx) * 1.25, (v - cy) * 1.5) * (params.shape === 'twin' ? 2.6 : 1.6)));
-    if (params.shape === 'twin') shape -= (1 - smoothstep(0, 0.07, Math.abs(u - 0.51 - (v - 0.5) * 0.3))) * 0.5;
+    if (params.shape === 'coast') {
+      const side = [u, 1 - u, v, 1 - v][coastSide];
+      shape = 1 - clamp((side - 0.05) * 1.3, 0, 1);
+    } else shape = blobShape(u, v);
+    // archipelago: the blobs only gather the islands into loose groups
+    if (params.shape === 'archipelago') shape = 0.3 + Math.max(-0.3, shape) * 0.15;
+    // two lands: a strait between them, across the line joining their centres
+    const strait = params.shape === 'twin' ? 1 - smoothstep(0.02, 0.1, Math.abs((u - 0.5) * Math.cos(twinAxis) + (v - 0.5) * Math.sin(twinAxis))) : 0;
+    shape -= strait * 1.2;
+    // the land's interior is a plateau: its relief comes from the noise and the ridges
+    const body = params.shape === 'archipelago' ? shape : (smoothstep(-0.25, 0.3, shape) - 0.4) * 0.75;
     // always keep a band of sea at the map edge (except the coast's land side)
-    const edge = Math.min(u, v, 1 - u, 1 - v), edgeK = params.shape === 'coast' ? Math.min(v, 1 - v, 1 - u) : edge;
-    n = n * 0.75 + clamp(shape, -0.6, 1) * 0.45 - (1 - smoothstep(0, 0.08, edgeK)) * 0.5;
+    const edges = [u0, 1 - u0, v0, 1 - v0];
+    if (params.shape === 'coast') edges.splice(coastSide, 1);
+    const edgeK = Math.min(...edges);
+    n = n * 0.75 + body * 0.6 + ridgeAt(u, v) * (0.22 + fine * 0.2) * (1 - strait) - (1 - smoothstep(0, 0.1, edgeK)) * 0.8;
     h[idx(x, y)] = n;
   }
   // sea level at the requested land share
@@ -79,6 +142,23 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
   let hmax = -Infinity;
   for (let i = 0; i < h.length; i++) if (h[i] > hmax) hmax = h[i];
   const elev = (i: number) => (h[i] - sea) / (hmax - sea || 1);
+  // a few lakes in low, inland ground (rivers end in them, towns like their shores)
+  if (params.shape !== 'archipelago') {
+    const inland = (x: number, y: number, rad: number) => {
+      for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= gw || Y >= gh || h[idx(X, Y)] <= sea) return false; }
+      return true;
+    };
+    for (let n = Math.round(rint(r, 0, 3) * Math.sqrt((C * R) / (48 * 32))), tries = 0; n > 0 && tries < 80; tries++) {
+      const x = rint(r, 8, gw - 9), y = rint(r, 8, gh - 9), i = idx(x, y);
+      if (elev(i) > 0.35 || !inland(x, y, 8)) continue;
+      const rad = rrange(r, 1.5, 3.5);
+      for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
+        const j = idx(x + dx, y + dy), d = Math.hypot(dx * rrange(r, 0.8, 1.2), dy * 1.2);
+        if (d < rad) h[j] = Math.min(h[j], sea - 0.02 * (1 - d / rad) - 0.001);
+      }
+      n--;
+    }
+  }
   const isLand = (x: number, y: number) => x >= 0 && y >= 0 && x < gw && y < gh && h[idx(x, y)] > sea;
 
   // ---- climate
@@ -92,11 +172,14 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
       const j = idx(X, Y); if (seaDist[j] > seaDist[i] + 1) { seaDist[j] = seaDist[i] + 1; queue.push(j); }
     }
   }
+  const wind = r() * Math.PI * 2, windK = rrange(r, 0.15, 0.55), windX = Math.cos(wind) * windK, windY = Math.sin(wind) * windK;
+  const warmth = rrange(r, -0.07, 0.07);
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
     const i = idx(x, y), e = Math.max(0, elev(i));
     const lat = y / gh; // north (top) is colder
-    temp[i] = clamp(0.15 + lat * 0.75 * (1 - params.climate * 0.5) + params.climate * 0.35 - e * 0.45 + (sampleWrap(NT, 256, x * k, y * k) - 0.5) * 0.25, 0, 1);
-    moist[i] = clamp(sampleWrap(NM, 256, ox + x * k * 1.3, oy + y * k * 1.3) * 0.9 + 0.35 - Math.min(seaDist[i], 40) / 60, 0, 1);
+    temp[i] = clamp(0.15 + lat * 0.75 * (1 - params.climate * 0.5) + params.climate * 0.35 + warmth - e * 0.45 + (sampleWrap(NT, 256, x * k, y * k) - 0.5) * 0.25, 0, 1);
+    // prevailing wind: one side of the land is wetter, the other drier (forests and swamps vs steppe and desert)
+    moist[i] = clamp(sampleWrap(NM, 256, ox + x * k * 1.3, oy + y * k * 1.3) * 0.9 + 0.35 - Math.min(seaDist[i], 40) / 60 + ((x / gw - 0.5) * windX + (y / gh - 0.5) * windY), 0, 1);
   }
   const biomeOf = (i: number): string | null => {
     const e = elev(i), T = temp[i], M = moist[i];
