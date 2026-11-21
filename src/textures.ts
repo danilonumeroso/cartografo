@@ -47,6 +47,9 @@ export const TEXTURES: TexDef[] = [
   { id: 'stonetiles', name: t('Large stone tiles'), layer: 'below', floor: true, swatch: '#7e7a72' },
   { id: 'pavers', name: t('Plaza pavers'), layer: 'below', floor: true, swatch: '#b0a690' },
   { id: 'mossycobble', name: t('Mossy cobblestone'), layer: 'below', floor: true, swatch: '#6f7458' },
+  { id: 'wornflags', name: t('Worn flagstones'), layer: 'below', floor: true, swatch: '#7d6a58' },
+  { id: 'darktiles', name: t('Dark stone tiles'), layer: 'below', floor: true, swatch: '#3e3732' },
+  { id: 'wornplanks', name: t('Worn planks'), layer: 'below', floor: true, swatch: '#a8672e' },
   { id: 'grassystones', name: t('Grassy flagstones'), layer: 'below', floor: true, swatch: '#7f7a66' },
   { id: 'crazypaving', name: t('Crazy paving'), layer: 'below', floor: true, swatch: '#948c7e' },
   { id: 'hextiles', name: t('Hexagon tiles'), layer: 'below', floor: true, swatch: '#7a8a8e' },
@@ -410,6 +413,8 @@ function generate(id: string): HTMLCanvasElement {
   // photo-only floors fall back to a painted look-alike
   if (id === 'mossycobble') return generate('cobble');
   if (id === 'grassystones') return generate('crazypaving');
+  if (id === 'wornflags' || id === 'darktiles') return generate('flagstone');
+  if (id === 'wornplanks') return generate('wood');
   const seed = [...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffff;
   const r = mulberry32(seed);
   let c: HTMLCanvasElement;

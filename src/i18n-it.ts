@@ -1178,4 +1178,7 @@ export const IT: Record<string, string> = {
   "Tower": "Torre",
   "Mossy cobblestone": "Ciottolato muschioso",
   "Grassy flagstones": "Lastricato erboso",
+  "Worn flagstones": "Lastre consumate",
+  "Dark stone tiles": "Piastrelle di pietra scura",
+  "Worn planks": "Assi consumate",
 };

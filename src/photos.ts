@@ -7,6 +7,9 @@ const BASE = import.meta.env.BASE_URL + 'textures/';
 export const PHOTO_GROUND: Record<string, { file: string; repeat: number; filter?: string }> = {
   cobble: { file: 'cobble.jpg', repeat: 2, filter: 'saturate(1.1) contrast(1.08)' },
   mossycobble: { file: 'mossycobble.jpg', repeat: 2, filter: 'saturate(1.15) contrast(1.05)' },
+  wornflags: { file: 'wornflags.jpg', repeat: 3, filter: 'contrast(1.08)' },
+  darktiles: { file: 'darktiles.jpg', repeat: 2, filter: 'contrast(1.05) brightness(1.05)' },
+  wornplanks: { file: 'wornplanks.jpg', repeat: 2, filter: 'saturate(0.9) contrast(1.05)' },
   grassystones: { file: 'grassystones.jpg', repeat: 2, filter: 'saturate(1.05) brightness(1.05) contrast(1.1)' },
 };
 /** Roof grain for city buildings, used as a grey detail layer over each roof's own colour. */

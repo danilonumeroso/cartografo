@@ -14,6 +14,9 @@ and blended over each building's own colour.
 | `cobble.jpg` | Cobblestone Floor 001 | Rob Tuytel | https://polyhaven.com/a/cobblestone_floor_001 |
 | `mossycobble.jpg` | Mossy Cobblestone | Sơn Nguyễn | https://polyhaven.com/a/mossy_cobblestone |
 | `grassystones.jpg` | Grassy Cobblestone | Dario Barresi, Charlotte Baglioni | https://polyhaven.com/a/grassy_cobblestone |
+| `wornflags.jpg` | Red Sandstone Pavement | Amal Kumar | https://polyhaven.com/a/red_sandstone_pavement |
+| `darktiles.jpg` | Rock Tile Floor 02 | Charlotte Baglioni | https://polyhaven.com/a/rock_tile_floor_02 |
+| `wornplanks.jpg` | Wood Floor Worn | Dimitrios Savva | https://polyhaven.com/a/wood_floor_worn |
 | `roof_tile.jpg` | Clay Roof Tiles 02 | Amal Kumar | https://polyhaven.com/a/clay_roof_tiles_02 |
 | `roof_slate.jpg` | Roof Slates 02 | Rob Tuytel | https://polyhaven.com/a/roof_slates_02 |
 | `roof_thatch.jpg` | Reed Roof 04 | Rob Tuytel | https://polyhaven.com/a/reed_roof_04 |
