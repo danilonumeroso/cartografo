@@ -1176,4 +1176,6 @@ export const IT: Record<string, string> = {
   "Generate a new city": "Genera una nuova città",
   "Streets, roofs, walls, taverns": "Strade, tetti, mura, taverne",
   "Tower": "Torre",
+  "Mossy cobblestone": "Ciottolato muschioso",
+  "Grassy flagstones": "Lastricato erboso",
 };

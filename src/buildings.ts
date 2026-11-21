@@ -1,7 +1,19 @@
 import type { Building, RoofStyle } from './model';
 import { mulberry32, shade } from './util';
+import { roofGrainFor } from './photos';
 
 type C2D = CanvasRenderingContext2D;
+
+/** Roof grain patterns per canvas context (patterns cannot be shared between contexts). */
+const patterns = new WeakMap<C2D, Map<string, CanvasPattern | null>>();
+function grainPattern(ctx: C2D, roof: string): CanvasPattern | null {
+  let m = patterns.get(ctx);
+  if (!m) { m = new Map(); patterns.set(ctx, m); }
+  if (!m.has(roof)) { const g = roofGrainFor(roof); m.set(roof, g ? ctx.createPattern(g, 'repeat') : null); }
+  return m.get(roof)!;
+}
+/** World px covered by one copy of the roof photo (a little larger than life, so tiles stay readable). */
+const GRAIN_PX = 36;
 
 export const ROOF_COLORS: Record<RoofStyle, string[]> = {
   tile: ['#a8482e', '#b8583a', '#9a4030', '#b0603e', '#8a3a28'],
@@ -50,8 +62,18 @@ function hipRoof(ctx: C2D, w: number, h: number, col: string, rot: number, style
     ctx.closePath();
     ctx.fillStyle = shade(col, lit * 0.22);
     ctx.fill();
-    // courses parallel to the eave
     ctx.save(); ctx.clip();
+    const pat = grainPattern(ctx, style);
+    if (pat) {
+      // photo grain: the image's downward axis follows the slope of this face
+      const g = pat as CanvasPattern & { setTransform(m: DOMMatrix): void };
+      g.setTransform(new DOMMatrix().rotateSelf(((Math.atan2(ny, nx) - Math.PI / 2) * 180) / Math.PI).scaleSelf(GRAIN_PX / 256));
+      ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = pat; ctx.fillRect(-hw, -hh, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.restore();
+      continue;
+    }
+    // courses parallel to the eave
     const step = style === 'thatch' ? 3 : style === 'slate' ? 5 : 6;
     ctx.strokeStyle = style === 'thatch' ? 'rgba(90,60,20,0.22)' : 'rgba(0,0,0,0.2)'; ctx.lineWidth = style === 'thatch' ? 0.8 : 1;
     ctx.beginPath();

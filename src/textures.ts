@@ -1,6 +1,7 @@
 import { fbmTile } from './noise';
 import { clamp, ctx2d, hexToRgb, lerp, makeCanvas, mulberry32, pick, Rng, rrange, smoothstep } from './util';
 import { t } from './i18n';
+import { drawPhotoGround } from './photos';
 
 /** Texture tile size in world px (4 grid squares). */
 export const TS = 400;
@@ -45,6 +46,8 @@ export const TEXTURES: TexDef[] = [
   { id: 'brickfloor', name: t('Brick floor'), layer: 'below', floor: true, swatch: '#9a5440' },
   { id: 'stonetiles', name: t('Large stone tiles'), layer: 'below', floor: true, swatch: '#7e7a72' },
   { id: 'pavers', name: t('Plaza pavers'), layer: 'below', floor: true, swatch: '#b0a690' },
+  { id: 'mossycobble', name: t('Mossy cobblestone'), layer: 'below', floor: true, swatch: '#6f7458' },
+  { id: 'grassystones', name: t('Grassy flagstones'), layer: 'below', floor: true, swatch: '#7f7a66' },
   { id: 'crazypaving', name: t('Crazy paving'), layer: 'below', floor: true, swatch: '#948c7e' },
   { id: 'hextiles', name: t('Hexagon tiles'), layer: 'below', floor: true, swatch: '#7a8a8e' },
   { id: 'sandstone', name: t('Sandstone tiles'), layer: 'below', floor: true, swatch: '#cfa874' },
@@ -402,6 +405,11 @@ function worldGround(seed: number, c1: string, c2: string, r: Rng, dabs: string[
 }
 
 function generate(id: string): HTMLCanvasElement {
+  const photo = makeCanvas(TS, TS);
+  if (drawPhotoGround(id, ctx2d(photo), TS)) return photo;
+  // photo-only floors fall back to a painted look-alike
+  if (id === 'mossycobble') return generate('cobble');
+  if (id === 'grassystones') return generate('crazypaving');
   const seed = [...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffff;
   const r = mulberry32(seed);
   let c: HTMLCanvasElement;
