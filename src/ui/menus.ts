@@ -6,6 +6,7 @@ import { migrateDoc, MIN_SIZE, WallStyle, Weather } from '../model';
 import { deleteMap, getMap, listAssets, listMaps, putAsset, putMap, StoredMap } from '../storage';
 import { blobToDataURL, dataURLToBlob, downloadBlob, uid } from '../util';
 import { showGenerator } from './generator';
+import { showCityGenerator } from './citygen';
 import { showWorldGenerator } from './worldgen';
 import { FLOORS, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
 import { lang, LANGS, setLang, t } from '../i18n';
@@ -77,7 +78,10 @@ export function mapSettings(ed: Editor) {
     doc.kind === 'world' ? h('div', { class: 'row' }, h('button', { class: 'chip-btn', onclick: () => {
       if (doc.combat.active) { toast(t('End combat before regenerating the map')); return; }
       close(); showWorldGenerator(ed, 'apply');
-    } }, icon('dice', 16), t('Generate a new world'))) : h('div', { class: 'row' },
+    } }, icon('dice', 16), t('Generate a new world'))) : doc.kind === 'city' ? h('div', { class: 'row' }, h('button', { class: 'chip-btn', onclick: () => {
+      if (doc.combat.active) { toast(t('End combat before regenerating the map')); return; }
+      close(); showCityGenerator(ed, 'apply');
+    } }, icon('dice', 16), t('Generate a new city'))) : h('div', { class: 'row' },
       h('select', { onchange: (e: Event) => { gen = (e.target as HTMLSelectElement).value as GenKind; } }, ...Object.entries(GEN_NAMES).map(([k, v]) => h('option', { value: k }, v))),
       h('button', { class: 'chip-btn', onclick: () => {
         if (doc.combat.active) { toast(t('End combat before regenerating the map')); return; }

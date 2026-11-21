@@ -4,6 +4,7 @@ import { CELL, CONDITIONS, Door, GridSettings, Label, Light, MapPath, Marker, St
 import type { MapRuntime } from './runtime';
 import { STAMP_BY_ID, STAMP_PAD, stampImage } from './stamps';
 import { getTexture } from './textures';
+import { drawBuildings } from './buildings';
 import { ctx2d, makeCanvas, pattern, rgba } from './util';
 import { t } from './i18n';
 
@@ -79,6 +80,7 @@ export function renderScene(ctx: C2D, rt: MapRuntime, view: View, vw: number, vh
 
   const stamps = doc.stamps;
   if (doc.paths?.length) drawPaths(ctx, doc.paths);
+  if (doc.buildings?.length) drawBuildings(ctx, doc.buildings, vis);
   drawStamps(ctx, stamps, 0, vis, o);
   drawWalls(ctx, rt);
   for (const d of doc.doors) drawDoor(ctx, d, o.player);
@@ -345,7 +347,7 @@ export function chaikin(pts: number[], iterations = 2): number[] {
 export function drawPaths(ctx: C2D, paths: MapPath[]) {
   ctx.save();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  const order: Record<string, number> = { border: 0, river: 1, road: 2, trail: 3 };
+  const order: Record<string, number> = { border: 0, river: 1, road: 2, trail: 3, citywall: 4 };
   for (const p of [...paths].sort((a, b) => order[a.kind] - order[b.kind])) {
     if (p.pts.length < 4) continue;
     const w = p.width;
@@ -364,6 +366,27 @@ export function drawPaths(ctx: C2D, paths: MapPath[]) {
       smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(60,40,20,0.55)'; ctx.lineWidth = w + 3; ctx.stroke();
       smoothPath(ctx, p.pts); ctx.strokeStyle = '#c9a874'; ctx.lineWidth = w; ctx.stroke();
       ctx.setLineDash([w * 1.6, w * 1.4]); smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(110,80,40,0.55)'; ctx.lineWidth = Math.max(1, w * 0.25); ctx.stroke(); ctx.setLineDash([]);
+    } else if (p.kind === 'citywall') {
+      // thick stone curtain wall with a walkway and round towers at the corners
+      smoothPath(ctx, p.pts); ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14; ctx.shadowOffsetX = 6; ctx.shadowOffsetY = 8;
+      ctx.strokeStyle = '#1c1814'; ctx.lineWidth = w + 6; ctx.stroke();
+      ctx.shadowColor = 'transparent';
+      ctx.beginPath(); for (let i = 0; i < p.pts.length; i += 2) ctx.lineTo(p.pts[i], p.pts[i + 1]);
+      ctx.strokeStyle = '#9a948a'; ctx.lineWidth = w; ctx.stroke();
+      ctx.strokeStyle = '#b8b2a6'; ctx.lineWidth = w * 0.45; ctx.stroke();
+      ctx.setLineDash([w * 0.35, w * 0.35]); ctx.strokeStyle = 'rgba(40,35,30,0.55)'; ctx.lineWidth = w * 0.18;
+      ctx.beginPath(); for (let i = 0; i < p.pts.length; i += 2) ctx.lineTo(p.pts[i], p.pts[i + 1]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.lineCap = 'round';
+      for (let i = 0; i < p.pts.length; i += 2) {
+        const x = p.pts[i], y = p.pts[i + 1], R = w * 0.95;
+        ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12; ctx.shadowOffsetX = 5; ctx.shadowOffsetY = 7;
+        ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fillStyle = '#8a847a'; ctx.fill();
+        ctx.shadowColor = 'transparent';
+        const g = ctx.createRadialGradient(x - R * 0.3, y - R * 0.3, R * 0.1, x, y, R); g.addColorStop(0, '#c8c2b6'); g.addColorStop(1, '#7a746a');
+        ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = '#1c1814'; ctx.lineWidth = 2.4; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, R * 0.62, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(40,35,30,0.45)'; ctx.lineWidth = R * 0.18; ctx.setLineDash([R * 0.22, R * 0.18]); ctx.stroke(); ctx.setLineDash([]);
+      }
     } else if (p.kind === 'trail') {
       ctx.setLineDash([w * 0.4, w * 1.6]); smoothPath(ctx, p.pts); ctx.strokeStyle = 'rgba(70,45,20,0.85)'; ctx.lineWidth = w; ctx.stroke(); ctx.setLineDash([]);
     } else {
@@ -577,7 +600,7 @@ export function measureText(a: [number, number], b: [number, number], g: Pick<Gr
   const cells = Math.hypot(b[0] - a[0], b[1] - a[1]) / CELL, dist = cells * g.feet;
   const d = dist >= 100 ? Math.round(dist) : Math.round(dist * 10) / 10;
   // 5e travel pace: 24 miles (about 38 km) a day at a normal pace
-  const days = unit === 'ft' ? 0 : dist / (unit === 'mi' ? 24 : 38);
+  const days = unit === 'ft' || unit === 'm' ? 0 : dist / (unit === 'mi' ? 24 : 38);
   const base = `${d} ${unit}`;
   return days >= 0.1 ? t('{dist} · {days} days on foot', { dist: base, days: Math.round(days * 10) / 10 }) : base;
 }

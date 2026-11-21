@@ -4,10 +4,13 @@ import { FONTS, MARKER_ICONS, TOKEN_KIND_NAMES, TOKEN_SIZE_NAMES, TokenKind, Tok
 import { BIOMES, TEXTURES } from '../textures';
 import { DOOR_NAMES, FLOORS, iconBtn, PATH_NAMES, PATH_WIDTH, listPicker, miniSlider, sep, subBtn, texPicker, toggle, TOKEN_PRESETS, WALL_NAMES, WALL_SWATCH } from './common';
 import { t } from '../i18n';
+import { BUILDING_KINDS, ROOF_NAMES } from '../places';
+import { ROOF_COLORS } from '../buildings';
+import type { BuildingKind, RoofStyle } from '../model';
 
 export type Intent = 'select' | 'paint' | 'build' | 'furnish' | 'annotate';
 export const TOOL_INTENT: Record<Tool, Intent> = {
-  select: 'select', terrain: 'paint', room: 'build', cave: 'build', wall: 'build', door: 'build', path: 'build',
+  select: 'select', terrain: 'paint', room: 'build', cave: 'build', wall: 'build', door: 'build', path: 'build', building: 'build',
   stamp: 'furnish', light: 'furnish', token: 'annotate', text: 'annotate', marker: 'annotate', measure: 'annotate', fog: 'select', ping: 'select',
 };
 export const INTENTS: { id: Intent; name: string; icon: string; tool: Tool; key: string }[] = [
@@ -74,7 +77,7 @@ export function renderRail(ed: Editor) {
   for (const it of INTENTS) {
     rail.appendChild(h('button', {
       class: 'rail-btn' + (cur === it.id ? ' on' : ''), 'aria-pressed': String(cur === it.id), title: `${it.name} (${it.key})`,
-      onclick: () => ed.setTool(ed.lastTool[it.id] || (it.id === 'build' && ed.rt.doc.kind === 'world' ? 'path' : it.tool)),
+      onclick: () => ed.setTool(ed.lastTool[it.id] || (it.id === 'build' && ed.rt.doc.kind === 'world' ? 'path' : it.id === 'build' && ed.rt.doc.kind === 'city' ? 'building' : it.tool)),
     }, icon(it.icon, 20), h('span', null, it.name)));
   }
 }
@@ -141,8 +144,21 @@ export function renderDock(ed: Editor) {
   }
   if (intent === 'build' && world) {
     const pk = o.path;
-    bar.append(...PATH_NAMES.map(([k, name, ico]) => subBtn(name, ico, ed.tool === 'path' && pk.kind === k, set('path', () => { pk.kind = k; pk.width = PATH_WIDTH[k]; }))), sep(),
+    bar.append(...PATH_NAMES.filter(([k]) => k !== 'citywall').map(([k, name, ico]) => subBtn(name, ico, ed.tool === 'path' && pk.kind === k, set('path', () => { pk.kind = k; pk.width = PATH_WIDTH[k]; }))), sep(),
       miniSlider(t('Width'), pk.width, 3, 30, 1, (v) => { pk.width = v; }, (v) => String(v)));
+    return;
+  }
+  if (intent === 'build' && ed.rt.doc.kind === 'city') {
+    const pk = o.path, bo = o.building;
+    bar.append(
+      subBtn(t('Building'), 'roomRect', ed.tool === 'building', set('building')),
+      subBtn(t('City wall'), 'wall', ed.tool === 'path' && pk.kind === 'citywall', set('path', () => { pk.kind = 'citywall'; pk.width = PATH_WIDTH.citywall; })),
+      subBtn(t('River'), 'river', ed.tool === 'path' && pk.kind === 'river', set('path', () => { pk.kind = 'river'; pk.width = 60; })),
+      sep());
+    if (ed.tool === 'building') bar.append(
+      listPicker<BuildingKind>(t('Type'), BUILDING_KINDS, bo.kind, (v) => { bo.kind = v; rr(); }),
+      listPicker<RoofStyle>(t('Roof'), ROOF_NAMES, bo.roof, (v) => { bo.roof = v; rr(); }, (v) => ROOF_COLORS[v][0]));
+    else bar.append(miniSlider(t('Width'), pk.width, 3, 120, 1, (v) => { pk.width = v; }, (v) => String(v)));
     return;
   }
   if (intent === 'build') {

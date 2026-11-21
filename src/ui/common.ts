@@ -17,8 +17,8 @@ export const DOOR_NAMES: [DoorKind, string][] = [
   ['wood', t('Wood')], ['double', t('Double')], ['iron', t('Portcullis')], ['secret', t('Secret')], ['arch', t('Archway')],
   ['stone', t('Stone slab')], ['bars', t('Cell door')], ['curtain', t('Curtain')],
 ];
-export const PATH_NAMES: [PathKind, string, string][] = [['river', t('River'), 'river'], ['road', t('Road'), 'road'], ['trail', t('Trail'), 'trail'], ['border', t('Border'), 'border']];
-export const PATH_WIDTH: Record<PathKind, number> = { river: 12, road: 7, trail: 5, border: 8 };
+export const PATH_NAMES: [PathKind, string, string][] = [['river', t('River'), 'river'], ['road', t('Road'), 'road'], ['trail', t('Trail'), 'trail'], ['border', t('Border'), 'border'], ['citywall', t('City wall'), 'wall']];
+export const PATH_WIDTH: Record<PathKind, number> = { river: 12, road: 7, trail: 5, border: 8, citywall: 26 };
 export const FLOORS = TEXTURES.filter((t) => t.floor && !t.world).map((t) => t.id);
 export const TOKEN_PRESETS: { name: string; kind: TokenKind; size: TokenSize }[] = [
   { name: t('Party'), kind: 'pc', size: 'medium' },

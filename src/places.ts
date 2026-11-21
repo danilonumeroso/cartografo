@@ -1,4 +1,4 @@
-import { CELL, MapDoc, Stamp } from './model';
+import { Building, BuildingKind, CELL, MapDoc, RoofStyle, Stamp } from './model';
 import { STAMP_BY_ID } from './stamps';
 import { t } from './i18n';
 
@@ -6,13 +6,16 @@ import { t } from './i18n';
 export function suggestedTemplate(type: string): string {
   if (['w_cave', 'w_mine', 'w_lair'].includes(type)) return 'cave';
   if (['w_ruins', 'w_castle', 'w_tower', 'w_temple', 'w_portal'].includes(type)) return 'dungeon';
-  if (['w_capital', 'w_city', 'w_town', 'w_village', 'w_port'].includes(type)) return 'tavern';
+  if (['w_capital', 'w_city', 'w_port'].includes(type)) return 'city';
+  if (['w_town', 'w_village'].includes(type)) return 'tavern';
+  if (type === 'b_house' || type === 'b_shop' || type === 'b_tavern' || type === 'b_warehouse') return 'tavern';
+  if (type === 'b_keep' || type === 'b_tower' || type === 'b_temple' || type === 'b_guild' || type === 'b_manor') return 'dungeon';
   if (['w_snowpeaks', 'w_iceberg'].includes(type)) return 'winter';
   if (['w_forest', 'w_pines', 'w_jungle', 'w_deadwood', 'w_camp', 'w_stones', 'w_swamp'].includes(type)) return 'forest';
   return 'dungeon';
 }
 export const LINK_TEMPLATES: [string, () => string][] = [
-  ['dungeon', () => 'Dungeon'], ['cave', () => t('Cave')], ['forest', () => t('Forest')], ['tavern', () => t('Tavern')],
+  ['city', () => t('City')], ['dungeon', () => 'Dungeon'], ['cave', () => t('Cave')], ['forest', () => t('Forest')], ['tavern', () => t('Tavern')],
   ['winter', () => t('Winter forest')], ['outdoor', () => t('Grass (outdoor)')], ['empty-dungeon', () => t('Dark rock (dungeon)')],
 ];
 
@@ -25,3 +28,15 @@ export function placeName(doc: MapDoc, s: Stamp): string {
   }
   return best || STAMP_BY_ID.get(s.type)?.name || t('Map');
 }
+
+export const BUILDING_KINDS: [BuildingKind, string][] = [
+  ['house', t('House')], ['shop', t('Shop')], ['tavern', t('Tavern')], ['temple', t('Temple')], ['guild', t('Guildhall')],
+  ['manor', t('Manor')], ['warehouse', t('Warehouse')], ['keep', t('Keep')], ['tower', t('Tower')],
+];
+export const ROOF_NAMES: [RoofStyle, string][] = [['tile', t('Clay tiles')], ['slate', t('Slate')], ['thatch', t('Thatch')], ['wood', t('Shingles')], ['copper', t('Copper')]];
+/** A building's own name, else its kind. */
+export function buildingName(b: Building): string {
+  return b.name || BUILDING_KINDS.find(([k]) => k === b.kind)?.[1] || t('Building');
+}
+/** Battle-map template that suits a building. */
+export const buildingTemplate = (b: Building) => suggestedTemplate('b_' + b.kind);

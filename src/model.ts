@@ -16,12 +16,21 @@ export type TokenKind = 'pc' | 'ally' | 'npc' | 'monster';
 
 export interface Room { id: string; pts: number[]; floor: string; zoneOnly?: boolean; name?: string }
 export interface Wall { id: string; pts: number[]; style: WallStyle }
-export type PathKind = 'river' | 'road' | 'trail' | 'border';
+export type PathKind = 'river' | 'road' | 'trail' | 'border' | 'citywall';
 /** A vector line on world maps: rivers, roads, trails and borders. Width in world px. */
 export interface MapPath { id: string; pts: number[]; kind: PathKind; width: number; name?: string }
-export type MapKind = 'battle' | 'world';
+export type MapKind = 'battle' | 'world' | 'city';
+export type RoofStyle = 'tile' | 'slate' | 'thatch' | 'wood' | 'copper';
+export type BuildingKind = 'house' | 'shop' | 'tavern' | 'temple' | 'guild' | 'manor' | 'warehouse' | 'keep' | 'tower';
+/** A building on a city plan, seen as its roof: a rotated rectangle centred on x, y (world px). */
+export interface Building {
+  id: string; x: number; y: number; w: number; h: number; rot: number;
+  roof: RoofStyle; color?: string; kind: BuildingKind; name?: string;
+  /** Id of the battle map this building opens. */
+  link?: string;
+}
 export type GridShape = 'square' | 'hex';
-export type DistUnit = 'ft' | 'mi' | 'km';
+export type DistUnit = 'ft' | 'mi' | 'km' | 'm';
 export interface Door { id: string; x: number; y: number; rot: number; kind: DoorKind; open: boolean; width: number }
 export interface Stamp { id: string; type: string; x: number; y: number; rot: number; scale: number; flip?: boolean; variant: number; hidden?: boolean; /** Id of the map this place opens. */ link?: string }
 export interface Light { id: string; x: number; y: number; radius: number; color: string; intensity: number; flicker: boolean; stampId?: string }
@@ -43,7 +52,7 @@ export interface MapDoc {
   id: string; name: string; kind: MapKind;
   cols: number; rows: number;
   bg: string; caveFloor: string; wallStyle: WallStyle;
-  rooms: Room[]; walls: Wall[]; doors: Door[]; stamps: Stamp[]; lights: Light[]; paths: MapPath[];
+  rooms: Room[]; walls: Wall[]; doors: Door[]; stamps: Stamp[]; lights: Light[]; paths: MapPath[]; buildings: Building[];
   labels: Label[]; markers: Marker[]; tokens: Token[];
   combat: Combat;
   grid: GridSettings;
@@ -58,7 +67,7 @@ export interface MapDoc {
   createdAt: number; updatedAt: number;
 }
 
-export const OBJECT_KEYS = ['rooms', 'walls', 'doors', 'stamps', 'lights', 'paths', 'labels', 'markers', 'tokens'] as const;
+export const OBJECT_KEYS = ['rooms', 'walls', 'doors', 'stamps', 'lights', 'paths', 'buildings', 'labels', 'markers', 'tokens'] as const;
 export type ObjectKey = typeof OBJECT_KEYS[number];
 
 export function newDoc(name: string, cols: number, rows: number, bg = 'rock'): MapDoc {
@@ -66,7 +75,7 @@ export function newDoc(name: string, cols: number, rows: number, bg = 'rock'): M
   return {
     id: uid(), name, kind: 'battle', cols, rows,
     bg, caveFloor: 'cave', wallStyle: 'stone',
-    rooms: [], walls: [], doors: [], stamps: [], lights: [], paths: [], labels: [], markers: [], tokens: [],
+    rooms: [], walls: [], doors: [], stamps: [], lights: [], paths: [], buildings: [], labels: [], markers: [], tokens: [],
     combat: { active: false, round: 1, turn: null, members: [] },
     grid: { show: true, color: '#000000', opacity: 0.22, showPlayers: true, feet: 5, shape: 'square', unit: 'ft' },
     ambient: 0, fogEnabled: false, weather: 'none', createdAt: now, updatedAt: now,
@@ -80,7 +89,7 @@ export function migrateDoc(d: any): MapDoc {
   for (const k of OBJECT_KEYS) if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   out.grid = { ...base.grid, ...(d.grid || {}) };
   out.combat = { ...base.combat, ...(d.combat || {}) };
-  if (out.kind !== 'world') out.kind = 'battle';
+  if (out.kind !== 'world' && out.kind !== 'city') out.kind = 'battle';
   if (!out.weather) out.weather = 'none';
   return out;
 }
@@ -119,6 +128,15 @@ export function newWorldDoc(name: string, cols: number, rows: number): MapDoc {
   d.grid = { show: true, color: '#1a2a3a', opacity: 0.16, showPlayers: false, feet: 6, shape: 'hex', unit: 'mi' };
   d.fogEnabled = true;
   d.sight = 2;
+  return d;
+}
+
+/** A blank city plan: one cell is about 10 metres, no fog, grid hidden. */
+export function newCityDoc(name: string, cols: number, rows: number): MapDoc {
+  const d = newDoc(name, cols, rows, 'grass');
+  d.kind = 'city';
+  d.grid = { show: false, color: '#000000', opacity: 0.12, showPlayers: false, feet: 10, shape: 'square', unit: 'm' };
+  d.fogEnabled = false;
   return d;
 }
 

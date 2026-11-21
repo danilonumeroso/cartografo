@@ -6,7 +6,9 @@ import {
 } from '../model';
 import { labelFont, markerGeom, tokenRadius } from '../render';
 import { STAMP_BY_ID, VARIANTS } from '../stamps';
-import { LINK_TEMPLATES, suggestedTemplate } from '../places';
+import { BUILDING_KINDS, buildingName, buildingTemplate, LINK_TEMPLATES, ROOF_NAMES, suggestedTemplate } from '../places';
+import { ROOF_COLORS, roofColor } from '../buildings';
+import type { Building, BuildingKind, RoofStyle } from '../model';
 import { DOOR_NAMES, FLOORS, iconBtn, PATH_NAMES, listPicker, miniSlider, texName, texSwatch, toggle, WALL_NAMES, WALL_SWATCH } from './common';
 import { t } from '../i18n';
 
@@ -26,6 +28,7 @@ export function renderInspector(ed: Editor) {
   const dup = iconBtn('copy', t('Duplicate'), () => ed.duplicateSel());
   switch (ed.sel.kind) {
     case 'stamp': return stampBar(ed, box, o as Stamp, m, dup, del);
+    case 'building': return buildingCard(ed, box, o as Building, m, dup, del);
     case 'wall': {
       const w = o as Wall;
       box.classList.add('toolbar');
@@ -81,16 +84,15 @@ function stampBar(ed: Editor, box: HTMLElement, s: Stamp, m: M, dup: HTMLElement
     iconBtn(s.hidden ? 'eyeOff' : 'eye', s.hidden ? t('Hidden from players: show') : t('Visible to players: hide'), () => { m(t('Visibility'), () => { s.hidden = !s.hidden; }); ed.refreshUI(); }, s.hidden ? 'warn' : ''),
     dup, del,
   );
-  if (STAMP_BY_ID.get(s.type)?.world) box.append(h('span', { class: 'tb-sep' }), placeLink(ed, s, m));
+  if (STAMP_BY_ID.get(s.type)?.world) box.append(h('span', { class: 'tb-sep' }), placeLink(ed, s, m, suggestedTemplate(s.type)));
 }
 
 /** Link a place on the world map to a battle map: open it, create one, or pick an existing map. */
-function placeLink(ed: Editor, s: Stamp, m: M): HTMLElement {
+function placeLink(ed: Editor, s: Stamp | Building, m: M, suggested: string): HTMLElement {
   const linked = s.link ? ed.maps.find((x) => x.id === s.link) : null;
   if (linked) return h('span', { class: 'tb-group' },
     h('button', { class: 'btn-primary btn-sm', onclick: () => ed.openLinked(s) }, icon('arrowRight', 16), t('Open {name}', { name: linked.name })),
     iconBtn('x', t('Remove the link'), () => { m(t('Link'), () => { s.link = undefined; }); ed.refreshUI(); }));
-  const suggested = suggestedTemplate(s.type);
   const btn: HTMLButtonElement = h('button', { class: 'chip-btn', onclick: () => {
     const others = ed.maps.filter((x) => x.id !== ed.rt.doc.id);
     const opts = [...LINK_TEMPLATES].sort((a, b) => (a[0] === suggested ? -1 : b[0] === suggested ? 1 : 0));
@@ -102,6 +104,28 @@ function placeLink(ed: Editor, s: Stamp, m: M): HTMLElement {
       others.length ? h('div', { class: 'pop-list' }, ...others.map((x) => h('button', { onclick: () => { closePopover(); m(t('Link'), () => { s.link = x.id; }); ed.refreshUI(); } }, x.name))) : ''), 'below');
   } }, icon('map', 16), t('Battle map…'));
   return btn;
+}
+
+/** A building on a city map: name, type, roof, size and the map it opens. */
+function buildingCard(ed: Editor, box: HTMLElement, b: Building, m: M, dup: HTMLElement, del: HTMLElement) {
+  box.classList.add('card');
+  const name = h('input', { type: 'text', class: 'title-input', value: b.name || '', placeholder: buildingName({ ...b, name: undefined }), 'aria-label': t('Name'), oninput: () => m(t('Name'), () => { b.name = name.value || undefined; }, 'name') });
+  const col = h('input', { type: 'color', value: roofColor(b), 'aria-label': t('Roof color'), oninput: () => m(t('Color'), () => { b.color = col.value; }, 'col') });
+  if (ed.mode === 'session') {
+    box.append(cardHead(ed, h('strong', null, buildingName(b))));
+    if (b.link) box.append(h('div', { class: 'card-actions' }, placeLink(ed, b, m, buildingTemplate(b))));
+    return;
+  }
+  box.append(cardHead(ed, name),
+    h('div', { class: 'card-row' },
+      listPicker<BuildingKind>(t('Type'), BUILDING_KINDS, b.kind, (v) => { m(t('Type'), () => { b.kind = v; }); ed.refreshUI(); }),
+      listPicker<RoofStyle>(t('Roof'), ROOF_NAMES, b.roof, (v) => { m(t('Roof'), () => { b.roof = v; b.color = undefined; }); ed.refreshUI(); }, (v) => ROOF_COLORS[v][0])),
+    miniSlider(t('Width'), +(b.w / CELL * 10).toFixed(0), 3, 60, 1, (v) => m(t('Size'), () => { b.w = (v / 10) * CELL; }, 'w'), (v) => v + ' m'),
+    miniSlider(t('Depth'), +(b.h / CELL * 10).toFixed(0), 3, 60, 1, (v) => m(t('Size'), () => { b.h = (v / 10) * CELL; }, 'h'), (v) => v + ' m'),
+    miniSlider(t('Rotation'), Math.round((b.rot * 180) / Math.PI), -180, 180, 1, (v) => m(t('Rotate'), () => { b.rot = (v * Math.PI) / 180; }, 'rot'), (v) => v + '°'),
+    h('div', { class: 'card-row' }, h('label', { class: 'color-dot' }, col, h('span', null, t('Roof color')))),
+    h('div', { class: 'card-sec' }, h('span', { class: 'card-label' }, t('Interior')), placeLink(ed, b, m, buildingTemplate(b))),
+    h('div', { class: 'card-actions' }, dup, del));
 }
 
 function roomCard(ed: Editor, box: HTMLElement, r: Room, m: M, dup: HTMLElement, del: HTMLElement) {

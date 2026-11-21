@@ -4,11 +4,14 @@ import { h, icon, toast } from './dom';
 import { MARGIN } from './engine';
 import { generate, GenKind } from './generate';
 import { DEFAULT_WORLD, generateWorld, WorldParams } from './worldgen';
+import { CityParams, DEFAULT_CITY, generateCity } from './citygen';
+import { buildingCorners, inBuilding } from './buildings';
 import { DungeonParams, generateDungeon, randomSeed } from './dungeon';
 import { hexCenter } from './util';
-import { placeName } from './places';
+import { buildingName, placeName } from './places';
 import { History } from './history';
 import {
+  Building, BuildingKind, RoofStyle, newCityDoc,
   CELL, Combat, MIN_SIZE, DoorKind, PathKind, Label, Light, MapDoc, Marker, MASK_SCALE, newDoc, newToken, newWorldDoc, OBJECT_KEYS, Room, Stamp, Token, TOKEN_CELLS, TokenKind, TokenSize, WallStyle,
 } from './model';
 import { buildTopbar, buildZoom, Intent, renderDock, renderRail, TOOL_INTENT, updateTopbar } from './ui/chrome';
@@ -25,10 +28,10 @@ import { canvasToBlob, clamp, clipRect, ctx2d, debounce, distToSeg, expandRect, 
 import { t } from './i18n';
 
 export type Mode = 'edit' | 'session';
-export type Tool = 'select' | 'terrain' | 'room' | 'cave' | 'wall' | 'door' | 'path' | 'stamp' | 'light' | 'token' | 'text' | 'marker' | 'measure' | 'fog' | 'ping';
-export type SelKind = 'stamp' | 'room' | 'wall' | 'path' | 'door' | 'light' | 'label' | 'marker' | 'token';
+export type Tool = 'select' | 'terrain' | 'room' | 'cave' | 'wall' | 'door' | 'path' | 'building' | 'stamp' | 'light' | 'token' | 'text' | 'marker' | 'measure' | 'fog' | 'ping';
+export type SelKind = 'stamp' | 'building' | 'room' | 'wall' | 'path' | 'door' | 'light' | 'label' | 'marker' | 'token';
 export interface Sel { kind: SelKind; id: string }
-export const SEL_KEY: Record<SelKind, keyof MapDoc> = { stamp: 'stamps', room: 'rooms', wall: 'walls', path: 'paths', door: 'doors', light: 'lights', label: 'labels', marker: 'markers', token: 'tokens' };
+export const SEL_KEY: Record<SelKind, keyof MapDoc> = { stamp: 'stamps', building: 'buildings', room: 'rooms', wall: 'walls', path: 'paths', door: 'doors', light: 'lights', label: 'labels', marker: 'markers', token: 'tokens' };
 
 export const EDIT_TOOLS: { id: Tool; name: string; key: string }[] = [
   { id: 'select', name: t('Select / move'), key: 'V' },
@@ -80,6 +83,7 @@ export class Editor {
     cave: { size: 2, erase: false },
     wall: { style: 'stone' as WallStyle },
     path: { kind: 'river' as PathKind, width: 12 },
+    building: { roof: 'tile' as RoofStyle, kind: 'house' as BuildingKind },
     door: { kind: 'wood' as DoorKind, width: 1 },
     stamp: { type: 'barrel', scale: 1, jitter: 0.12, randomRot: true, scatter: false, spacing: 1.2, snap: false },
     light: { radius: 4, color: '#ffb35a', intensity: 0.9, flicker: true },
@@ -198,16 +202,18 @@ export class Editor {
     if (this.mode === 'session') this.channel.send({ t: 'map', id });
   }
 
-  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string }; world?: { params: WorldParams; seed: string }; id?: string; parent?: string }) {
+  async createMap(o: { name: string; cols: number; rows: number; template: string; gen?: { params: DungeonParams; seed: string }; world?: { params: WorldParams; seed: string }; city?: { params: CityParams; seed: string }; id?: string; parent?: string }) {
     if (this.rt) await this.saveNow();
     const bg = o.template === 'outdoor' ? 'grass' : o.template === 'interior' ? 'wood' : 'rock';
     const size = (v: number) => Math.max(MIN_SIZE, Math.min(80, Math.round(v) || MIN_SIZE));
     const world = o.template === 'world';
-    const doc = world ? newWorldDoc(o.name, size(o.cols), size(o.rows)) : newDoc(o.name, size(o.cols), size(o.rows), bg);
+    const city = o.template === 'city';
+    const doc = world ? newWorldDoc(o.name, size(o.cols), size(o.rows)) : city ? newCityDoc(o.name, size(o.cols), size(o.rows)) : newDoc(o.name, size(o.cols), size(o.rows), bg);
     if (o.id) doc.id = o.id;
     if (o.parent) doc.parent = o.parent;
     const rt = new MapRuntime(doc);
     if (world) generateWorld(rt, o.world?.params ?? DEFAULT_WORLD, o.world?.seed ?? randomSeed('WORLD'));
+    else if (city) generateCity(rt, o.city?.params ?? DEFAULT_CITY, o.city?.seed ?? randomSeed('CITY'));
     else if (o.gen) generateDungeon(rt, o.gen.params, o.gen.seed);
     else if (['dungeon', 'cave', 'forest', 'tavern', 'winter'].includes(o.template)) generate(rt, o.template as GenKind);
     this.showBusy(t('Painting the map…'));
@@ -220,28 +226,38 @@ export class Editor {
     this.updateTitle();
   }
 
-  /** Create a battle map for a place on the world map and link the place to it. */
-  async createLinkedMap(s: Stamp, template: string) {
-    const world = this.rt.doc, id = uid(), name = placeName(world, s);
+  /** Create a map for a place on the world map (or a building in a city) and link it. */
+  async createLinkedMap(s: Stamp | Building, template: string) {
+    const parent = this.rt.doc, id = uid(), name = 'type' in s ? placeName(parent, s) : buildingName(s);
     this.mutate(t('Link'), () => { s.link = id; });
-    await this.createMap({ id, parent: world.id, name, cols: 30, rows: 22, template });
-    toast(t('“{name}” is linked: double-click the place on the world map to open it', { name }));
+    if (template === 'city') {
+      const water = 'type' in s && s.type === 'w_port' ? 'coast' : 'river';
+      await this.createMap({ id, parent: parent.id, name, cols: 56, rows: 40, template, city: { params: { ...DEFAULT_CITY, water }, seed: randomSeed('CITY') } });
+    } else await this.createMap({ id, parent: parent.id, name, cols: 30, rows: 22, template });
+    toast(parent.kind === 'city'
+      ? t('“{name}” is linked: double-click the building on the city map to open it', { name })
+      : t('“{name}” is linked: double-click the place on the world map to open it', { name }));
   }
-  /** Open the map linked to a place, if it still exists. */
-  async openLinked(s: Stamp) {
+  /** Open the map linked to a place or building, if it still exists. */
+  async openLinked(s: { link?: string }) {
     if (!s.link) return;
     if (!this.maps.some((m) => m.id === s.link)) { toast(t('The linked map no longer exists')); return; }
     await this.openMap(s.link);
   }
-  /** A linked place under the pointer (works in Play too, where props are not selectable). */
-  linkedStampAt(x: number, y: number): Stamp | null {
+  /** A linked place or building under the pointer (works in Play too, where props are not selectable). */
+  linkedAt(x: number, y: number): Stamp | Building | null {
     const d = this.rt.doc;
     for (let i = d.stamps.length - 1; i >= 0; i--) { const s = d.stamps[i]; if (s.link && this.inStamp(s, x, y)) return s; }
+    for (let i = (d.buildings?.length ?? 0) - 1; i >= 0; i--) { const b = d.buildings[i]; if (b.link && inBuilding(b, x, y)) return b; }
     return null;
   }
 
   async regenerate(kind: GenKind) {
     await this.regenerateWith(() => generate(this.rt, kind));
+  }
+  /** Replace the current city map with a newly generated city. */
+  async applyCity(params: CityParams, seed: string) {
+    await this.regenerateWith(() => generateCity(this.rt, params, seed));
   }
   /** Replace the current world map with a newly generated world. */
   async applyWorld(params: WorldParams, seed: string) {
@@ -500,6 +516,7 @@ export class Editor {
     for (const l of d.lights) if (Math.hypot(x - l.x, y - l.y) < 16 / z) return { kind: 'light', id: l.id };
     const order = d.stamps.map((s, i) => [s, i] as [Stamp, number]).sort((a, b) => stampLayer(b[0]) - stampLayer(a[0]) || b[1] - a[1]);
     for (const [s] of order) if (this.inStamp(s, x, y)) return { kind: 'stamp', id: s.id };
+    for (let i = (d.buildings?.length ?? 0) - 1; i >= 0; i--) if (inBuilding(d.buildings[i], x, y)) return { kind: 'building', id: d.buildings[i].id };
     for (let i = (d.paths?.length ?? 0) - 1; i >= 0; i--) {
       const p = d.paths[i], tol = Math.max(14 / z, p.width / 2 + 4);
       for (let k = 2; k < p.pts.length; k += 2) if (distToSeg(x, y, p.pts[k - 2], p.pts[k - 1], p.pts[k], p.pts[k + 1]) < tol) return { kind: 'path', id: p.id };
@@ -527,6 +544,7 @@ export class Editor {
   // ======================================================================== snapping
   snapCorner(x: number, y: number): [number, number] { return [Math.round(x / CELL) * CELL, Math.round(y / CELL) * CELL]; }
   snapHalf(x: number, y: number): [number, number] { const g = CELL / 2; return [Math.round(x / g) * g, Math.round(y / g) * g]; }
+  snapQuarter(x: number, y: number): [number, number] { const g = CELL / 4; return [Math.round(x / g) * g, Math.round(y / g) * g]; }
   snapCenter(x: number, y: number): [number, number] { return [(Math.floor(x / CELL) + 0.5) * CELL, (Math.floor(y / CELL) + 0.5) * CELL]; }
   snapToken(t: Token) {
     if (this.rt.doc.grid.shape === 'hex') { [t.x, t.y] = hexCenter(t.x, t.y); return; }
@@ -607,6 +625,12 @@ export class Editor {
       }
       case 'wall': this.addDraftPoint(e.altKey ? [x, y] : this.snapCorner(x, y), false); return;
       case 'path': this.addDraftPoint([x, y], false); return;
+      case 'building': {
+        const [cx, cy] = this.snapQuarter(x, y);
+        this.rectDraft = [cx, cy, cx, cy];
+        this.drag = { kind: 'rect', sx: x, sy: y, ex: x, ey: y };
+        return;
+      }
       case 'door': {
         const hit = this.hit(x, y, true);
         if (hit?.kind === 'door') { this.toggleDoor(hit.id); return; }
@@ -735,7 +759,7 @@ export class Editor {
         break;
       }
       case 'rect': {
-        const [cx, cy] = this.snapCorner(x, y);
+        const [cx, cy] = this.tool === 'building' ? this.snapQuarter(x, y) : this.snapCorner(x, y);
         this.rectDraft![2] = cx; this.rectDraft![3] = cy;
         d.ex = x; d.ey = y;
         break;
@@ -787,6 +811,12 @@ export class Editor {
       case 'rect': {
         const [x0, y0, x1, y1] = this.rectDraft!;
         this.rectDraft = null;
+        if (this.tool === 'building') {
+          const w = Math.abs(x1 - x0), hh = Math.abs(y1 - y0);
+          if (w >= CELL / 4 && hh >= CELL / 4) this.addBuilding((x0 + x1) / 2, (y0 + y1) / 2, w, hh);
+          else this.addBuilding(d.sx, d.sy, CELL, CELL * 0.8);
+          break;
+        }
         const realDrag = Math.abs(d.ex - d.sx) >= CELL / 2 && Math.abs(d.ey - d.sy) >= CELL / 2;
         if (realDrag && Math.abs(x1 - x0) >= CELL && Math.abs(y1 - y0) >= CELL) {
           const a = Math.min(x0, x1), b = Math.min(y0, y1), c = Math.max(x0, x1), dd = Math.max(y0, y1);
@@ -816,7 +846,7 @@ export class Editor {
     if ((this.tool === 'room' && this.opts.room.shape === 'poly') || this.tool === 'wall' || this.tool === 'path') { this.finishDraft(); return; }
     if (this.tool === 'select') {
       const [x, y] = this.toWorld(e);
-      const place = this.linkedStampAt(x, y);
+      const place = this.linkedAt(x, y);
       if (place) { this.openLinked(place); return; }
     }
     if (this.tool === 'select' && this.mode === 'edit') {
@@ -878,7 +908,7 @@ export class Editor {
     if (e.key === '0' && !mod) { this.fitView(); return; }
     if (e.key === 'q' || e.key === 'e') {
       const o = this.getSel();
-      if (o && this.sel && (this.sel.kind === 'stamp' || this.sel.kind === 'label')) { this.mutate(t('Rotate'), () => { o.rot += (e.key === 'e' ? 1 : -1) * Math.PI / 12; }, 'rot:' + o.id); this.refreshUI(); }
+      if (o && this.sel && (this.sel.kind === 'stamp' || this.sel.kind === 'label' || this.sel.kind === 'building')) { this.mutate(t('Rotate'), () => { o.rot += (e.key === 'e' ? 1 : -1) * Math.PI / 12; }, 'rot:' + o.id); this.refreshUI(); }
       return;
     }
     const list = this.mode === 'edit' ? EDIT_TOOLS : SESSION_TOOLS;
@@ -906,7 +936,8 @@ export class Editor {
   setTool(t: Tool) {
     // world maps have no rooms, caves, walls or doors: building means drawing routes
     if (this.rt?.doc.kind === 'world' && (t === 'room' || t === 'cave' || t === 'wall' || t === 'door')) t = 'path';
-    if (this.rt?.doc.kind !== 'world' && t === 'path') t = 'room';
+    if (this.rt?.doc.kind === 'battle' && (t === 'path' || t === 'building')) t = 'room';
+    if (this.rt?.doc.kind === 'world' && t === 'building') t = 'path';
     this.tool = t;
     if (this.mode === 'edit') this.lastTool[TOOL_INTENT[t]] = t;
     this.draft = null; this.rectDraft = null;
@@ -1020,6 +1051,11 @@ export class Editor {
       this.mutate(t('Path'), () => this.rt.doc.paths.push({ id, pts: d, kind: o.kind, width: o.width }));
     }
     this.requestRender();
+  }
+  addBuilding(x: number, y: number, w: number, h: number) {
+    const o = this.opts.building, id = uid();
+    this.mutate(t('Building'), () => this.rt.doc.buildings.push({ id, x, y, w, h, rot: 0, roof: o.roof, kind: o.kind }));
+    this.select({ kind: 'building', id });
   }
   addRoom(pts: number[]) {
     const o = this.opts.room, id = uid();
@@ -1174,6 +1210,7 @@ export class Editor {
       case 'cave': return this.opts.cave.erase ? t('Drag to fill with rock') : t('Drag to dig tunnels with natural walls');
       case 'wall': return t('Click to add points · double-click or Enter to finish · Alt for free points');
       case 'path': return t('Click along the route · double-click or Enter to finish');
+      case 'building': return t('Drag to draw a building · click to place a house');
       case 'door': return t('Click a grid edge · click an existing door to open it');
       case 'text': return t('Click on the map to write');
       case 'marker': return t('Click to place a marker with secret notes');
@@ -1233,9 +1270,12 @@ export class Editor {
     ctx.save();
     ctx.setTransform(this.dpr * z, 0, 0, this.dpr * z, this.dpr * this.view.x, this.dpr * this.view.y);
     // places linked to another map (only the DM sees the badge)
-    for (const s of rt.doc.stamps) {
-      if (!s.link) continue;
-      const { w, h } = stampSize(s), r = 11 / z, bx = s.x + (w / 2) * s.scale * 0.8, by = s.y - (h / 2) * s.scale * 0.8;
+    const badges = [
+      ...rt.doc.stamps.filter((s) => s.link).map((s) => { const { w, h } = stampSize(s); return [s.x + (w / 2) * s.scale * 0.8, s.y - (h / 2) * s.scale * 0.8]; }),
+      ...(rt.doc.buildings ?? []).filter((b) => b.link).map((b) => [b.x + Math.max(b.w, b.h) * 0.35, b.y - Math.max(b.w, b.h) * 0.35]),
+    ];
+    for (const [bx, by] of badges) {
+      const r = 11 / z;
       ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fillStyle = '#e8b84a'; ctx.fill(); ctx.lineWidth = 2 / z; ctx.strokeStyle = '#1c1510'; ctx.stroke();
       ctx.lineWidth = 2.2 / z; ctx.strokeStyle = '#1c1510';
       for (const k of [-1, 1]) { ctx.beginPath(); ctx.ellipse(bx + k * 2.6 / z, by - k * 2.6 / z, 4.2 / z, 2.4 / z, -Math.PI / 4, 0, Math.PI * 2); ctx.stroke(); }
@@ -1342,6 +1382,10 @@ export class Editor {
             ctx.fill(); ctx.stroke();
           }
         }
+        break;
+      }
+      case 'building': {
+        ctx.beginPath(); buildingCorners(o).forEach((c) => ctx.lineTo(c[0], c[1])); ctx.closePath(); ctx.lineWidth = 3 / z; ctx.stroke();
         break;
       }
       case 'room': case 'wall': case 'path': {
