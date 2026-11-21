@@ -13,7 +13,10 @@ function detect(): Lang {
     const v = localStorage.getItem(KEY);
     if (v === 'en' || v === 'it') return v;
   } catch { /* storage unavailable */ }
-  return 'en';
+  // no saved choice yet: follow the browser (an Italian browser starts in Italian)
+  const prefs = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language];
+  const first = prefs.map((l) => (l || '').slice(0, 2).toLowerCase()).find((l) => l === 'it' || l === 'en');
+  return first === 'it' ? 'it' : 'en';
 }
 
 /** Current UI language. Resolved once at startup; changing it reloads the page. */
