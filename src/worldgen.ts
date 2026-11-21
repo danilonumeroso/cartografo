@@ -1,6 +1,6 @@
 import { CELL, Label, MapPath } from './model';
 import type { MapRuntime } from './runtime';
-import { B, reset } from './genkit';
+import { B, Box, declutter, nearby, reset } from './genkit';
 import { fbmTile, sampleWrap } from './noise';
 import { seedNumber } from './dungeon';
 import { clamp, ctx2d, makeCanvas, mulberry32, pick, Rng, rrange, smoothstep, uid } from './util';
@@ -333,19 +333,25 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
     Object.assign(l, { font: 'IM Fell English', color: '#2a1e14', stroke: 'rgba(244,236,216,0.85)', bold: false }, opts);
     return l;
   };
+  // labels are laid out at the end (declutter): towns first, they sit under their icon or just above it
+  const layout: { l: Label; moves: [number, number][] }[] = [];
+  const townBoxes: Box[] = [];
   for (const tw of towns) {
     const [cx, cy] = toCell(tw.x, tw.y);
     const size = tw.kind === 'capital' ? 54 : tw.kind === 'city' ? 42 : tw.kind === 'town' ? 34 : 27;
-    label(tw.name, cx, cy + (tw.kind === 'village' ? 0.6 : tw.kind === 'capital' ? 1.05 : 0.8), size, tw.kind === 'capital' ? { bold: true, font: 'Cinzel' } : {});
+    const off = tw.kind === 'village' ? 0.6 : tw.kind === 'capital' ? 1.05 : 0.8;
+    const l = label(tw.name, cx, cy + off, size, tw.kind === 'capital' ? { bold: true, font: 'Cinzel' } : {});
+    layout.push({ l, moves: [[0, 0], [0, -2 * off], [0, 0.4], [0, -2 * off - 0.4]] });
+    townBoxes.push({ x0: (cx - 0.45) * CELL, y0: (cy - 0.5) * CELL, x1: (cx + 0.45) * CELL, y1: (cy + 0.35) * CELL });
   }
   // the realm, named after the capital, over the biggest stretch of land
   const realm = towns[0]?.name ?? fantasyName(r);
-  if (towns[0]) { const [cx, cy] = toCell(towns[0].x, towns[0].y); label(t('Kingdom of {name}', { name: realm }).toUpperCase(), cx, cy - 1.8, 64, { font: 'Cinzel', color: 'rgba(60,30,20,0.75)', italic: false, bold: true }); }
+  if (towns[0]) { const [cx, cy] = toCell(towns[0].x, towns[0].y); layout.push({ l: label(t('Kingdom of {name}', { name: realm }).toUpperCase(), cx, cy - 1.8, 64, { font: 'Cinzel', color: 'rgba(60,30,20,0.75)', italic: false, bold: true }), moves: nearby(3, 4) }); }
   // seas: label the open water far from land
   const seaLabels = seaCells.filter((i) => deepSea(i) && (i % gw) > gw * 0.18 && (i % gw) < gw * 0.82);
   if (seaLabels.length) {
     const i = pick(r, seaLabels), [cx, cy] = toCell(i % gw, (i / gw) | 0);
-    label(pick(r, [t('Sea of {name}', { name: fantasyName(r) }), t('The {name} Ocean', { name: fantasyName(r) })]), cx, cy, 60, { color: 'rgba(230,245,255,0.92)', stroke: 'rgba(20,50,70,0.7)', italic: true });
+    layout.push({ l: label(pick(r, [t('Sea of {name}', { name: fantasyName(r) }), t('The {name} Ocean', { name: fantasyName(r) })]), cx, cy, 60, { color: 'rgba(230,245,255,0.92)', stroke: 'rgba(20,50,70,0.7)', italic: true }), moves: nearby(3, 6) });
   }
   // the main mountain range
   const peaks = icons.filter((ic) => ic.type === 'w_mountains' || ic.type === 'w_snowpeaks');
@@ -355,14 +361,15 @@ export function generateWorld(rt: MapRuntime, params: WorldParams, seed: string)
     const hub = peaks.reduce((a, p) => (near(p) > near(a) ? p : a), peaks[0]);
     const group = peaks.filter((q) => Math.hypot(q.x - hub.x, q.y - hub.y) < 4);
     const mx = group.reduce((s2, p) => s2 + p.x, 0) / group.length, my = Math.max(...group.map((p) => p.y));
-    label(t('{name} Mountains', { name: fantasyName(r) }), mx, my + 0.9, 44, { italic: true, color: 'rgba(50,35,25,0.85)' });
+    layout.push({ l: label(t('{name} Mountains', { name: fantasyName(r) }), mx, my + 0.9, 44, { italic: true, color: 'rgba(50,35,25,0.85)' }), moves: nearby(2, 3) });
   }
   // the biggest forest
   const forestIcons = icons.filter((ic) => ic.type === 'w_forest' || ic.type === 'w_pines');
   if (forestIcons.length >= 5) {
     const f = pick(r, forestIcons);
-    label(t('{name} Woods', { name: fantasyName(r) }), f.x, f.y + 0.8, 36, { italic: true, color: 'rgba(30,50,25,0.9)' });
+    layout.push({ l: label(t('{name} Woods', { name: fantasyName(r) }), f.x, f.y + 0.8, 36, { italic: true, color: 'rgba(30,50,25,0.9)' }), moves: nearby(2, 3) });
   }
+  declutter(rt.doc, layout, townBoxes);
 
   for (const k2 of rt.engine.masks.keys()) rt.engine.changed.add(k2);
   rt.fog.fillAll();

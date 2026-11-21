@@ -52,3 +52,55 @@ export function reset(doc: MapDoc) {
   doc.tokens = [];
   doc.combat = { active: false, round: 1, turn: null, members: [] };
 }
+
+// ---------------------------------------------------------------- label layout
+export interface Box { x0: number; y0: number; x1: number; y1: number }
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+/** World-space box of a label (same font and line height as drawLabel; rotation ignored). */
+export function labelBox(l: Label): Box {
+  const lines = l.text.split('\n');
+  measureCtx ??= typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  let w = 0;
+  for (const s of lines) {
+    if (measureCtx) {
+      measureCtx.font = `${l.italic ? 'italic ' : ''}${l.bold ? '700 ' : ''}${l.size}px "${l.font}", serif`;
+      w = Math.max(w, measureCtx.measureText(s).width);
+    } else w = Math.max(w, s.length * l.size * 0.6);
+  }
+  const hw = w / 2 + l.size * 0.12, hh = (lines.length * l.size * 1.15) / 2;
+  return { x0: l.x - hw, y0: l.y - hh, x1: l.x + hw, y1: l.y + hh };
+}
+const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+
+/**
+ * Nudge generated labels apart. Labels are laid out in the given order (most important first); each tries
+ * its candidate offsets (in cells) and keeps the first free spot, or else the least crowded one. Placed
+ * labels and the `blocked` boxes (icons that must stay readable) count as taken. Labels stay inside the map.
+ */
+export function declutter(doc: MapDoc, items: { l: Label; moves: [number, number][] }[], blocked: Box[] = []) {
+  const taken = [...blocked];
+  const W = doc.cols * CELL, H = doc.rows * CELL;
+  for (const { l, moves } of items) {
+    const x = l.x, y = l.y;
+    let best: [number, number] = [x, y], bestCost = Infinity;
+    for (const [dx, dy] of moves) {
+      l.x = x + dx * CELL; l.y = y + dy * CELL;
+      const b = labelBox(l);
+      if (b.x0 < 0 || b.y0 < 0 || b.x1 > W || b.y1 > H) continue;
+      const cost = taken.reduce((s, t) => s + overlap(b, t), 0);
+      if (cost < bestCost) { bestCost = cost; best = [l.x, l.y]; }
+      if (cost === 0) break;
+    }
+    [l.x, l.y] = best;
+    taken.push(labelBox(l));
+  }
+}
+
+/** Candidate offsets (cells) around a spot, nearest first; sideways moves count half as far as vertical ones. */
+export function nearby(maxDy: number, maxDx: number, step = 0.5): [number, number][] {
+  const out: [number, number][] = [];
+  for (let dy = 0; dy <= maxDy + 1e-6; dy += step) for (let dx = 0; dx <= maxDx + 1e-6; dx += step * 2)
+    for (const sy of dy ? [-1, 1] : [1]) for (const sx of dx ? [-1, 1] : [1]) out.push([sx * dx, sy * dy]);
+  return out.sort((a, b) => Math.hypot(a[0] * 0.5, a[1]) - Math.hypot(b[0] * 0.5, b[1]));
+}
